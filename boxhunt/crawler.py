@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class BoxHuntCrawler:
     """Main crawler class for collecting cardboard box images"""
     
-    def __init__(self, metadata_file: str = None):
-        self.api_manager = APIManager()
+    def __init__(self, metadata_file: str = None, enabled_sources: List[str] = None):
+        self.api_manager = APIManager(enabled_sources)
         self.image_processor = ImageProcessor()
         self.storage_manager = StorageManager(metadata_file)
         

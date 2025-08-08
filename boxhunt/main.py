@@ -35,7 +35,12 @@ def print_banner():
 
 async def cmd_crawl(args):
     """Handle crawl command"""
-    crawler = BoxHuntCrawler()
+    # Parse enabled sources if provided
+    enabled_sources = None
+    if args.sources:
+        enabled_sources = [s.strip() for s in args.sources.split(',')]
+    
+    crawler = BoxHuntCrawler(enabled_sources=enabled_sources)
     
     # Use custom keywords if provided
     keywords = None
@@ -69,7 +74,12 @@ async def cmd_crawl(args):
 
 async def cmd_resume(args):
     """Handle resume command"""
-    crawler = BoxHuntCrawler()
+    # Parse enabled sources if provided
+    enabled_sources = None
+    if args.sources:
+        enabled_sources = [s.strip() for s in args.sources.split(',')]
+    
+    crawler = BoxHuntCrawler(enabled_sources=enabled_sources)
     
     keywords = None
     if args.keywords:
@@ -181,6 +191,8 @@ def create_parser():
                              help='Max images per source per keyword (default: 20)')
     crawl_parser.add_argument('--delay', type=float, default=1.0,
                              help='Delay between keywords in seconds (default: 1.0)')
+    crawl_parser.add_argument('--sources', type=str,
+                             help='Comma-separated API sources (e.g. "pexels,unsplash", default: all available)')
     
     # Resume command  
     resume_parser = subparsers.add_parser('resume', help='Resume interrupted crawl')
@@ -188,6 +200,8 @@ def create_parser():
                               help='Comma-separated keywords (default: use all predefined)')
     resume_parser.add_argument('--max-images', type=int, default=20,
                               help='Max images per source per keyword (default: 20)')
+    resume_parser.add_argument('--sources', type=str,
+                              help='Comma-separated API sources (e.g. "pexels,unsplash", default: all available)')
     
     # Test command
     subparsers.add_parser('test', help='Test API connections')

@@ -76,8 +76,7 @@ class UnsplashAPIClient(BaseAPIClient):
         
         params = {
             'query': query,
-            'per_page': min(count, 30),  # Unsplash API limit
-            'orientation': 'all'
+            'per_page': min(count, 30)  # Unsplash API limit
         }
         
         async with aiohttp.ClientSession() as session:
@@ -143,22 +142,32 @@ class PexelsAPIClient(BaseAPIClient):
 class APIManager:
     """Manages multiple API clients"""
     
-    def __init__(self):
+    def __init__(self, enabled_sources: List[str] = None):
         self.clients = {}
         
         # Initialize available clients
         api_keys = Config.validate_api_keys()
         
-        if api_keys['unsplash']:
+        # If no sources specified, use all available
+        if enabled_sources is None:
+            enabled_sources = list(api_keys.keys())
+        else:
+            # Filter to only valid sources
+            enabled_sources = [src for src in enabled_sources if src in api_keys]
+        
+        if 'unsplash' in enabled_sources and api_keys['unsplash']:
             self.clients['unsplash'] = UnsplashAPIClient(Config.UNSPLASH_ACCESS_KEY)
             logger.info("Unsplash API client initialized")
             
-        if api_keys['pexels']:
+        if 'pexels' in enabled_sources and api_keys['pexels']:
             self.clients['pexels'] = PexelsAPIClient(Config.PEXELS_API_KEY)
             logger.info("Pexels API client initialized")
             
         if not self.clients:
-            logger.warning("No API clients initialized. Please check your API keys in .env file")
+            if enabled_sources:
+                logger.warning(f"No API clients initialized for sources {enabled_sources}. Please check your API keys in .env file")
+            else:
+                logger.warning("No API clients initialized. Please check your API keys in .env file")
     
     async def search_all_sources(self, query: str, count_per_source: int = 20) -> List[ImageResult]:
         """Search all available sources concurrently"""
