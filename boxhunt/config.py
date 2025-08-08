@@ -11,7 +11,6 @@ class Config:
     """Configuration settings for the image scraper"""
     
     # API Keys (set these in your .env file)
-    BING_API_KEY = os.getenv('BING_API_KEY', '')
     UNSPLASH_ACCESS_KEY = os.getenv('UNSPLASH_ACCESS_KEY', '')
     PEXELS_API_KEY = os.getenv('PEXELS_API_KEY', '')
     
@@ -58,7 +57,6 @@ class Config:
     METADATA_FILE = os.path.join(DATA_DIR, "metadata.csv")
     
     # API endpoints
-    BING_SEARCH_URL = "https://api.bing.microsoft.com/v7.0/images/search"
     UNSPLASH_SEARCH_URL = "https://api.unsplash.com/search/photos"
     PEXELS_SEARCH_URL = "https://api.pexels.com/v1/search"
     
@@ -74,7 +72,6 @@ class Config:
     def validate_api_keys(cls) -> Dict[str, bool]:
         """Check which API keys are available"""
         return {
-            'bing': bool(cls.BING_API_KEY),
             'unsplash': bool(cls.UNSPLASH_ACCESS_KEY),
             'pexels': bool(cls.PEXELS_API_KEY)
         }

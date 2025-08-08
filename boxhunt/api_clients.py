@@ -59,49 +59,6 @@ class BaseAPIClient(ABC):
             logger.error(f"Request failed: {e}")
             return None
 
-class BingAPIClient(BaseAPIClient):
-    """Bing Image Search API client"""
-    
-    async def search_images(self, query: str, count: int = 20) -> List[ImageResult]:
-        """Search images using Bing API"""
-        if not self.api_key:
-            logger.warning("Bing API key not provided")
-            return []
-            
-        headers = {
-            'Ocp-Apim-Subscription-Key': self.api_key,
-            'User-Agent': Config.USER_AGENT
-        }
-        
-        params = {
-            'q': query,
-            'count': min(count, 150),  # Bing API limit
-            'imageType': 'photo',
-            'size': 'medium',
-            'aspect': 'all',
-            'freshness': 'all',
-            'safeSearch': 'moderate'
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            data = await self._make_request(session, Config.BING_SEARCH_URL, params, headers)
-            
-            if not data or 'value' not in data:
-                return []
-                
-            results = []
-            for item in data['value']:
-                result = ImageResult(
-                    url=item.get('contentUrl', ''),
-                    thumbnail_url=item.get('thumbnailUrl', ''),
-                    title=item.get('name', ''),
-                    source='bing',
-                    width=item.get('width', 0),
-                    height=item.get('height', 0)
-                )
-                results.append(result)
-                
-            return results
 
 class UnsplashAPIClient(BaseAPIClient):
     """Unsplash API client"""
@@ -192,10 +149,6 @@ class APIManager:
         # Initialize available clients
         api_keys = Config.validate_api_keys()
         
-        if api_keys['bing']:
-            self.clients['bing'] = BingAPIClient(Config.BING_API_KEY)
-            logger.info("Bing API client initialized")
-            
         if api_keys['unsplash']:
             self.clients['unsplash'] = UnsplashAPIClient(Config.UNSPLASH_ACCESS_KEY)
             logger.info("Unsplash API client initialized")
