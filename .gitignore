@@ -52,11 +52,16 @@ env.bak/
 venv.bak/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# VS Code and Cursor (keep settings, exclude sensitive files)
+.vscode/launch.json
+.vscode/tasks.json
+.cursor/launch.json
+.cursor/tasks.json
 
 # OS
 .DS_Store

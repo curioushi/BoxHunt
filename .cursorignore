@@ -1,0 +1,41 @@
+# Cursor ignore file - prevents Cursor from scanning these files
+
+# Environment files
+.env
+.env.*
+*.env
+env/
+.venv/
+
+# Sensitive configuration
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# API Keys and tokens
+*api_key*
+*secret*
+*token*
+*password*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Logs that might contain sensitive info
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*~
