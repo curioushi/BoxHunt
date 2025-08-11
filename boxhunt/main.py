@@ -161,6 +161,70 @@ def cmd_export(args):
         print("\n❌ Export failed")
 
 
+async def cmd_crawl_site(args):
+    """Handle crawl-site command"""
+    from .website_client import WebsiteClient
+    from .image_processor import ImageProcessor
+    from .storage import StorageManager
+
+    # Initialize components for website crawling
+    website_client = WebsiteClient(
+        respect_robots=not args.ignore_robots if hasattr(args, 'ignore_robots') else Config.RESPECT_ROBOTS_TXT,
+        max_depth=args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH
+    )
+    
+    image_processor = ImageProcessor()
+    storage_manager = StorageManager()
+    
+    # Load existing hashes for deduplication
+    image_processor.downloaded_hashes = storage_manager.get_existing_hashes()
+
+    print(f"🌐 开始爬取网站: {args.url}")
+    print(f"   最大图片数: {args.max_images}")
+    print(f"   爬取深度: {args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH}")
+
+    try:
+        # Scrape images from website
+        search_results = await website_client.scrape_website(args.url, args.max_images)
+        
+        if not search_results:
+            print("❌ 未找到任何图片")
+            return
+
+        print(f"🔍 发现 {len(search_results)} 个图片链接")
+
+        # Process images (download, validate, deduplicate)
+        from tqdm.asyncio import tqdm
+        
+        processed_results = []
+        pbar = tqdm(total=len(search_results), desc="处理图片", unit="img")
+        
+        batch_size = max(1, min(Config.MAX_CONCURRENT_REQUESTS, len(search_results) // 10))
+        
+        for i in range(0, len(search_results), batch_size):
+            batch = search_results[i : i + batch_size]
+            batch_results = await image_processor.process_image_batch(batch)
+            processed_results.extend(batch_results)
+            pbar.update(len(batch))
+            
+        pbar.close()
+
+        # Save metadata
+        saved_count = 0
+        if processed_results:
+            if storage_manager.save_image_metadata(processed_results):
+                saved_count = len(processed_results)
+
+        print(f"✅ 网站爬取完成:")
+        print(f"   发现图片: {len(search_results)}")
+        print(f"   成功下载: {saved_count}")
+        print(f"   保存位置: {Config.IMAGES_DIR}")
+
+    except Exception as e:
+        logging.error(f"Website crawling failed: {e}")
+        print(f"❌ 爬取失败: {e}")
+
+
 def cmd_config(args):
     """Handle config command"""
     print("\n⚙️  Current Configuration:")
@@ -228,6 +292,31 @@ def create_parser():
         help='Comma-separated API sources (e.g. "pexels", default: all available)',
     )
 
+    # Crawl-site command
+    crawl_site_parser = subparsers.add_parser("crawl-site", help="Crawl images from a specific website")
+    crawl_site_parser.add_argument(
+        "url",
+        type=str,
+        help="Website URL to crawl for images"
+    )
+    crawl_site_parser.add_argument(
+        "--max-images",
+        type=int,
+        default=Config.MAX_IMAGES_PER_WEBSITE,
+        help=f"Maximum images to download (default: {Config.MAX_IMAGES_PER_WEBSITE})"
+    )
+    crawl_site_parser.add_argument(
+        "--depth",
+        type=int,
+        default=Config.MAX_SCRAPING_DEPTH,
+        help=f"Maximum crawling depth (default: {Config.MAX_SCRAPING_DEPTH})"
+    )
+    crawl_site_parser.add_argument(
+        "--ignore-robots",
+        action="store_true",
+        help="Ignore robots.txt restrictions"
+    )
+
     # Resume command
     resume_parser = subparsers.add_parser("resume", help="Resume interrupted crawl")
     resume_parser.add_argument(
@@ -289,6 +378,8 @@ def main():
         try:
             if args.command == "crawl":
                 await cmd_crawl(args)
+            elif args.command == "crawl-site":
+                await cmd_crawl_site(args)
             elif args.command == "resume":
                 await cmd_resume(args)
             elif args.command == "test":
@@ -313,7 +404,7 @@ def main():
             sys.exit(1)
 
     # Run async commands if needed
-    if args.command in ["crawl", "resume", "test"]:
+    if args.command in ["crawl", "crawl-site", "resume", "test"]:
         asyncio.run(run_async_command())
     else:
         # Run sync commands directly

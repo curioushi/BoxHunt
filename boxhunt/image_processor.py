@@ -33,23 +33,11 @@ class ImageProcessor:
 
     def _generate_filename(self, url: str, source: str) -> str:
         """Generate a unique filename for the image"""
-        # Get file extension from URL
-        parsed_url = urlparse(url)
-        path = parsed_url.path.lower()
-
-        # Try to extract extension from URL
-        for ext in Config.ALLOWED_FORMATS:
-            if f".{ext}" in path:
-                extension = ext
-                break
-        else:
-            extension = "jpg"  # Default extension
-
         # Create filename from URL hash
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
         timestamp = int(time.time())
 
-        return f"{source}_{timestamp}_{url_hash}.{extension}"
+        return f"{source}_{timestamp}_{url_hash}.jpg"
 
     async def _download_image(
         self, session: aiohttp.ClientSession, url: str
@@ -105,12 +93,8 @@ class ImageProcessor:
                 logger.debug(f"Image too small: {width}x{height}")
                 return None
 
-            # Check format
-            format_lower = image.format.lower() if image.format else "jpeg"
-            if format_lower not in ["jpeg", "jpg", "png", "webp"]:
-                format_lower = "jpeg"  # Default to JPEG
 
-            return image, format_lower
+            return image
 
         except Exception as e:
             logger.error(f"Invalid image data: {e}")
@@ -159,11 +143,9 @@ class ImageProcessor:
             return None
 
         # Validate image
-        validation_result = self._validate_image(image_data)
-        if not validation_result:
+        image = self._validate_image(image_data)
+        if not image:
             return None
-
-        image, format_name = validation_result
 
         # Calculate perceptual hash
         phash = self._calculate_perceptual_hash(image)
@@ -181,10 +163,7 @@ class ImageProcessor:
 
         try:
             # Save image
-            if format_name == "jpeg":
-                image.save(filepath, "JPEG", quality=85, optimize=True)
-            else:
-                image.save(filepath, format_name.upper())
+            image.save(filepath, "JPEG", quality=95, optimize=True)
 
             # Add hash to set
             self.downloaded_hashes.add(phash)

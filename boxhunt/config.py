@@ -32,6 +32,11 @@ class Config:
 
     KEYWORDS_CN = ["纸箱", "瓦楞纸箱", "搬家箱", "快递箱", "包装箱", "纸盒", "牛皮纸箱"]
 
+    # Website scraping settings
+    MAX_SCRAPING_DEPTH = 2  # Maximum depth for recursive scraping
+    RESPECT_ROBOTS_TXT = False  # Whether to respect robots.txt
+    MAX_IMAGES_PER_WEBSITE = 100  # Maximum images per website
+
     # Image filtering settings
     MIN_IMAGE_WIDTH = 256
     MIN_IMAGE_HEIGHT = 256
@@ -39,7 +44,7 @@ class Config:
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
     # Rate limiting
-    REQUEST_DELAY = 1.0  # seconds between requests
+    REQUEST_DELAY = 0.2  # seconds between requests
     MAX_CONCURRENT_REQUESTS = 3
 
     # Storage settings
@@ -61,4 +66,5 @@ class Config:
         """Check which API keys are available"""
         return {
             "pexels": bool(cls.PEXELS_API_KEY),
+            "website": True,  # Website scraping doesn't need API key
         }
