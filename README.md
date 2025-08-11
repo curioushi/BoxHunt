@@ -2,6 +2,36 @@
 
 BoxHunt是一个专门用于收集互联网上纸箱图像的网络爬虫工具。它支持多个图像API源，具备自动去重、质量控制和结构化存储功能。
 
+## Development
+
+This project requires Python 3.11+ and uses `ruff` for code formatting and linting.
+
+### Setup Development Environment
+
+```bash
+# Install development dependencies
+uv sync --dev
+
+# Check code quality
+uv run ruff check boxhunt/
+
+# Auto-fix issues where possible
+uv run ruff check --fix boxhunt/
+
+# Format code
+uv run ruff format boxhunt/
+
+# Run the application
+uv run boxhunt --help
+```
+
+### Code Quality Tools
+
+- **ruff**: Fast Python linter and formatter that replaces black, flake8, isort, and more
+- **pytest**: Testing framework (included in dev dependencies)
+
+The project follows PEP 8 style guidelines with a line length of 88 characters.
+
 ## 特性
 
 - 🎯 **多源搜索**: 支持 Unsplash、Pexels API
