@@ -34,7 +34,7 @@ The project follows PEP 8 style guidelines with a line length of 88 characters.
 
 ## 特性
 
-- 🎯 **多源搜索**: 支持 Unsplash、Pexels API
+- 🎯 **多源搜索**: 支持 Pexels API
 - 🔍 **智能关键词**: 内置中英文纸箱相关关键词库
 - 🖼️ **质量控制**: 自动过滤图片尺寸、格式和文件大小
 - 🚫 **智能去重**: 基于感知哈希的图像去重算法
@@ -71,16 +71,12 @@ cp env.example .env
 
 2. 编辑 `.env` 文件，添加API密钥:
 ```env
-# Unsplash API  
-UNSPLASH_ACCESS_KEY=your_unsplash_access_key_here
-
 # Pexels API
 PEXELS_API_KEY=your_pexels_api_key_here
 ```
 
 ### API密钥获取
 
-- **Unsplash API**: [Unsplash开发者页面](https://unsplash.com/developers)  
 - **Pexels API**: [Pexels API页面](https://www.pexels.com/api/)
 
 ## 使用方法
@@ -210,7 +206,7 @@ BoxHunt/
 | id | 唯一标识符 |
 | filename | 本地文件名 |
 | url | 原始图片URL |
-| source | 来源API (unsplash/pexels) |
+| source | 来源API (pexels) |
 | title | 图片标题/描述 |
 | width | 图片宽度 |
 | height | 图片高度 |

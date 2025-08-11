@@ -225,7 +225,7 @@ def create_parser():
     crawl_parser.add_argument(
         "--sources",
         type=str,
-        help='Comma-separated API sources (e.g. "pexels,unsplash", default: all available)',
+        help='Comma-separated API sources (e.g. "pexels", default: all available)',
     )
 
     # Resume command
@@ -244,7 +244,7 @@ def create_parser():
     resume_parser.add_argument(
         "--sources",
         type=str,
-        help='Comma-separated API sources (e.g. "pexels,unsplash", default: all available)',
+        help='Comma-separated API sources (e.g. "pexels", default: all available)',
     )
 
     # Test command

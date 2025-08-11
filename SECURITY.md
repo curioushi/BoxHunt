@@ -93,7 +93,6 @@ git ls-files | grep -E "\.env"
 
 ```env
 # ✅ 好的命名
-UNSPLASH_ACCESS_KEY=your_key_here
 PEXELS_API_KEY=your_key_here
 
 # ❌ 避免的命名
@@ -103,7 +102,6 @@ SECRET=your_key_here
 
 ### 2. 密钥权限限制
 
-- **Unsplash**: 确保只申请需要的权限 (public scope)
 - **Pexels**: 使用只读权限
 - 定期轮换API密钥
 
@@ -177,7 +175,6 @@ git filter-branch --force --index-filter \
    ```
 
 2. **联系API提供商**：
-   - Unsplash: https://unsplash.com/developers
    - Pexels: https://www.pexels.com/api/
 
 3. **重新配置**：

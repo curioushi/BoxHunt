@@ -77,48 +77,6 @@ class BaseAPIClient(ABC):
             return None
 
 
-class UnsplashAPIClient(BaseAPIClient):
-    """Unsplash API client"""
-
-    async def search_images(self, query: str, count: int = 20) -> list[ImageResult]:
-        """Search images using Unsplash API"""
-        if not self.api_key:
-            logger.warning("Unsplash API key not provided")
-            return []
-
-        headers = {
-            "Authorization": f"Client-ID {self.api_key}",
-            "User-Agent": Config.USER_AGENT,
-        }
-
-        params = {
-            "query": query,
-            "per_page": min(count, 30),  # Unsplash API limit
-        }
-
-        async with aiohttp.ClientSession() as session:
-            data = await self._make_request(
-                session, Config.UNSPLASH_SEARCH_URL, params, headers
-            )
-
-            if not data or "results" not in data:
-                return []
-
-            results = []
-            for item in data["results"]:
-                result = ImageResult(
-                    url=item["urls"]["regular"],
-                    thumbnail_url=item["urls"]["thumb"],
-                    title=item.get("description", item.get("alt_description", "")),
-                    source="unsplash",
-                    width=item.get("width", 0),
-                    height=item.get("height", 0),
-                )
-                results.append(result)
-
-            return results
-
-
 class PexelsAPIClient(BaseAPIClient):
     """Pexels API client"""
 
@@ -174,10 +132,6 @@ class APIManager:
         else:
             # Filter to only valid sources
             enabled_sources = [src for src in enabled_sources if src in api_keys]
-
-        if "unsplash" in enabled_sources and api_keys["unsplash"]:
-            self.clients["unsplash"] = UnsplashAPIClient(Config.UNSPLASH_ACCESS_KEY)
-            logger.info("Unsplash API client initialized")
 
         if "pexels" in enabled_sources and api_keys["pexels"]:
             self.clients["pexels"] = PexelsAPIClient(Config.PEXELS_API_KEY)

@@ -13,11 +13,9 @@ class Config:
     """Configuration settings for the image scraper"""
 
     # API endpoints
-    UNSPLASH_SEARCH_URL = "https://api.unsplash.com/search/photos"
     PEXELS_SEARCH_URL = "https://api.pexels.com/v1/search"
 
     # API Keys (set these in your .env file)
-    UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "")
     PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 
     # Search Keywords
@@ -62,6 +60,5 @@ class Config:
     def validate_api_keys(cls) -> dict[str, bool]:
         """Check which API keys are available"""
         return {
-            "unsplash": bool(cls.UNSPLASH_ACCESS_KEY),
             "pexels": bool(cls.PEXELS_API_KEY),
         }
