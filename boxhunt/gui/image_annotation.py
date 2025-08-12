@@ -495,21 +495,14 @@ class ImageAnnotationWidget(QWidget):
     annotations_changed = Signal(list)
     status_message = Signal(str)
 
-    def __init__(self, parent=None, show_title=True):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.show_title = show_title
         self.setup_ui()
 
     def setup_ui(self):
         """Setup user interface"""
         layout = QVBoxLayout(self)
-
-        # Title (optional)
-        if self.show_title:
-            title = QLabel("2D Image Annotation")
-            title.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px;")
-            layout.addWidget(title)
 
         # Toolbar
         toolbar = QToolBar()

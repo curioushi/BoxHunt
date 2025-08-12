@@ -100,10 +100,9 @@ class CropPreviewWidget(QWidget):
     crops_updated = Signal(list)  # List of crop data
     status_message = Signal(str)
 
-    def __init__(self, parent=None, show_title=True):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.show_title = show_title
         self.current_image = None  # PIL Image
         self.crop_items = []
 
@@ -114,12 +113,6 @@ class CropPreviewWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
-
-        # Title (optional)
-        if self.show_title:
-            title = QLabel("Crop Preview")
-            title.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px;")
-            layout.addWidget(title)
 
         # Info label
         self.info_label = QLabel("No annotations to preview")

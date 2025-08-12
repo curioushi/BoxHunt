@@ -121,11 +121,6 @@ class FileBrowserWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
 
-        # Title
-        title = QLabel("File Browser")
-        title.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px;")
-        layout.addWidget(title)
-
         # Path navigation
         nav_layout = QHBoxLayout()
 

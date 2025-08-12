@@ -173,8 +173,6 @@ def cmd_gui(args):
         print(f"   {e}")
         print("\n💡 Install GUI dependencies:")
         print("   uv sync  # This should install all dependencies including GUI ones")
-        print("   # OR manually:")
-        print("   pip install PySide6 PyOpenGL PyOpenGL-accelerate numpy scipy trimesh")
         sys.exit(1)
     except Exception as e:
         print(f"❌ Error starting GUI: {e}")

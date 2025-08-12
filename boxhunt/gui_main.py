@@ -30,41 +30,8 @@ def setup_application() -> QApplication:
     return app
 
 
-def check_dependencies() -> bool:
-    """Check if all required GUI dependencies are available"""
-    try:
-        import PySide6  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
-def show_dependency_error():
-    """Show error dialog for missing dependencies"""
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Critical)
-    msg.setWindowTitle("Missing Dependencies")
-    msg.setText("Required GUI dependencies are not installed.")
-    msg.setInformativeText(
-        "Please install the GUI dependencies:\n\n"
-        "pip install PySide6 PyOpenGL PyOpenGL-accelerate numpy scipy trimesh\n\n"
-        "Or update your installation:\n"
-        "uv sync"
-    )
-    msg.exec()
-
-
 def main():
     """Main GUI application entry point"""
-
-    # Check dependencies first
-    if not check_dependencies():
-        # Create minimal app just to show error
-        app = QApplication(sys.argv)
-        show_dependency_error()
-        return 1
-
     try:
         # Setup application
         app = setup_application()

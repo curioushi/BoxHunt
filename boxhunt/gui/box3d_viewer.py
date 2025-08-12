@@ -357,10 +357,9 @@ class Box3DViewerWidget(QWidget):
 
     status_message = Signal(str)
 
-    def __init__(self, parent=None, show_title=True):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.show_title = show_title
         self.crop_data = []
         self.setup_ui()
 
@@ -369,12 +368,6 @@ class Box3DViewerWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
-
-        # Title (optional)
-        if self.show_title:
-            title = QLabel("3D Box Viewer")
-            title.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px;")
-            layout.addWidget(title)
 
         # 3D renderer
         self.renderer = Box3DRenderer()

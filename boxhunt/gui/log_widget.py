@@ -63,13 +63,8 @@ class LogWidget(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
 
-        # Title and controls
+        # Controls
         header_layout = QHBoxLayout()
-
-        title = QLabel("Log Output")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        header_layout.addWidget(title)
-
         header_layout.addStretch()
 
         # Level filter
