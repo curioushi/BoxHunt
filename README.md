@@ -155,14 +155,36 @@ BoxHunt/
 │   ├── image_processor.py  # 图像处理
 │   ├── storage.py          # 存储管理
 │   ├── crawler.py          # 主爬虫类
+│   ├── website_client.py   # 网站爬取客户端
 │   └── main.py             # 命令行入口
-├── data/                   # 数据目录
-│   ├── images/            # 下载的图片
-│   ├── cache/             # 缓存文件  
-│   └── metadata.csv       # 元数据
+├── data/                   # 数据目录 (按域名分组)
+│   ├── example.com/       # 特定网站的数据
+│   │   ├── images/        # 该网站的图片
+│   │   └── metadata.csv   # 该网站的元数据
+│   └── another-site.com/  # 另一个网站的数据
+│       ├── images/
+│       └── metadata.csv
 ├── pyproject.toml         # 项目配置
 ├── env.example            # 环境变量模板
 └── README.md              # 项目说明
+```
+
+### 存储结构
+
+**按域名分目录存储**: 当使用 `crawl-site` 命令爬取特定网站时，所有数据都会按域名分组存储：
+
+- 图片文件存储在 `data/{domain_name}/images/` 目录
+- 元数据CSV文件存储在 `data/{domain_name}/metadata.csv`
+- 每个网站的数据完全独立，便于管理和分析
+
+例如：
+```bash
+# 爬取示例网站
+boxhunt crawl-site https://example.com/products
+
+# 数据将存储在:
+# data/example.com/images/     (图片文件)
+# data/example.com/metadata.csv (元数据)
 ```
 
 ## 配置选项

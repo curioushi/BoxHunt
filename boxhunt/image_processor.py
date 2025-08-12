@@ -23,13 +23,19 @@ logger = logging.getLogger(__name__)
 class ImageProcessor:
     """Handles image downloading, processing, and deduplication"""
 
-    def __init__(self):
+    def __init__(self, domain_name: str = None):
         self.downloaded_hashes: set[str] = set()
         self.failed_urls: set[str] = set()
+        self.domain_name = domain_name
+        
+        if domain_name:
+            self.images_dir = Config.get_domain_images_dir(domain_name)
+        else:
+            # Legacy support: if no domain specified, use old behavior
+            self.images_dir = os.path.join(Config.DATA_DIR, "images")
 
         # Ensure directories exist
-        os.makedirs(Config.IMAGES_DIR, exist_ok=True)
-        os.makedirs(Config.CACHE_DIR, exist_ok=True)
+        os.makedirs(self.images_dir, exist_ok=True)
 
     def _generate_filename(self, url: str, source: str) -> str:
         """Generate a unique filename for the image"""
@@ -159,7 +165,7 @@ class ImageProcessor:
 
         # Generate filename and save
         filename = self._generate_filename(image_result.url, image_result.source)
-        filepath = os.path.join(Config.IMAGES_DIR, filename)
+        filepath = os.path.join(self.images_dir, filename)
 
         try:
             # Save image

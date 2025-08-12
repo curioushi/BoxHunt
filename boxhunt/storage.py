@@ -18,16 +18,25 @@ logger = logging.getLogger(__name__)
 class StorageManager:
     """Manages storage of images and metadata"""
 
-    def __init__(self, metadata_file: str = None):
-        self.metadata_file = metadata_file or Config.METADATA_FILE
+    def __init__(self, domain_name: str = None, metadata_file: str = None):
+        self.domain_name = domain_name
+        if domain_name:
+            self.images_dir = Config.get_domain_images_dir(domain_name)
+            self.metadata_file = metadata_file or Config.get_domain_metadata_file(domain_name)
+        else:
+            # Legacy support: if no domain specified, use old behavior
+            self.images_dir = os.path.join(Config.DATA_DIR, "images") 
+            self.metadata_file = metadata_file or os.path.join(Config.DATA_DIR, "metadata.csv")
+        
         self.ensure_directories()
         self.init_metadata_file()
 
     def ensure_directories(self):
         """Create necessary directories"""
         os.makedirs(Config.DATA_DIR, exist_ok=True)
-        os.makedirs(Config.IMAGES_DIR, exist_ok=True)
-        os.makedirs(Config.CACHE_DIR, exist_ok=True)
+        os.makedirs(self.images_dir, exist_ok=True)
+        # Directory for metadata file
+        os.makedirs(os.path.dirname(self.metadata_file), exist_ok=True)
 
     def init_metadata_file(self):
         """Initialize metadata CSV file with headers if it doesn't exist"""
@@ -212,8 +221,8 @@ class StorageManager:
 
             # Get list of actual image files
             image_files = set()
-            if os.path.exists(Config.IMAGES_DIR):
-                for filename in os.listdir(Config.IMAGES_DIR):
+            if os.path.exists(self.images_dir):
+                for filename in os.listdir(self.images_dir):
                     if any(
                         filename.lower().endswith(f".{ext}")
                         for ext in Config.ALLOWED_FORMATS
@@ -227,7 +236,7 @@ class StorageManager:
             removed_count = 0
             for filename in orphaned_files:
                 try:
-                    filepath = os.path.join(Config.IMAGES_DIR, filename)
+                    filepath = os.path.join(self.images_dir, filename)
                     os.remove(filepath)
                     removed_count += 1
                     logger.debug(f"Removed orphaned file: {filename}")

@@ -49,9 +49,6 @@ class Config:
 
     # Storage settings
     DATA_DIR = "data"
-    IMAGES_DIR = os.path.join(DATA_DIR, "images")
-    CACHE_DIR = os.path.join(DATA_DIR, "cache")  # TODO: not used
-    METADATA_FILE = os.path.join(DATA_DIR, "metadata.csv")
 
     # User agent for web requests
     USER_AGENT = "BoxHunt/1.0 (Image Scraper for Research Purposes)"
@@ -60,6 +57,16 @@ class Config:
     def get_all_keywords(cls) -> list[str]:
         """Get all keywords (English + Chinese)"""
         return cls.KEYWORDS_EN + cls.KEYWORDS_CN
+
+    @classmethod
+    def get_domain_images_dir(cls, domain_name: str) -> str:
+        """Get images directory for a specific domain"""
+        return os.path.join(cls.DATA_DIR, domain_name, "images")
+    
+    @classmethod
+    def get_domain_metadata_file(cls, domain_name: str) -> str:
+        """Get metadata file path for a specific domain"""
+        return os.path.join(cls.DATA_DIR, domain_name, "metadata.csv")
 
     @classmethod
     def validate_api_keys(cls) -> dict[str, bool]:

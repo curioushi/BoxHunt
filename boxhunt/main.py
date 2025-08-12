@@ -166,22 +166,31 @@ async def cmd_crawl_site(args):
     from .website_client import WebsiteClient
     from .image_processor import ImageProcessor
     from .storage import StorageManager
+    from urllib.parse import urlparse
 
-    # Initialize components for website crawling
+    # Extract domain name from URL
+    parsed_url = urlparse(args.url)
+    domain_name = parsed_url.netloc.lower()
+    if domain_name.startswith('www.'):
+        domain_name = domain_name[4:]
+    domain_name = domain_name.split(':')[0]  # Remove port if exists
+
+    print(f"🌐 开始爬取网站: {args.url}")
+    print(f"   域名: {domain_name}")
+    print(f"   最大图片数: {args.max_images}")
+    print(f"   爬取深度: {args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH}")
+
+    # Initialize components for website crawling with domain-specific storage
     website_client = WebsiteClient(
-        respect_robots=not args.ignore_robots if hasattr(args, 'ignore_robots') else Config.RESPECT_ROBOTS_TXT,
+        respect_robots=args.respect_robots if hasattr(args, 'respect_robots') else Config.RESPECT_ROBOTS_TXT,
         max_depth=args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH
     )
     
-    image_processor = ImageProcessor()
-    storage_manager = StorageManager()
+    image_processor = ImageProcessor(domain_name=domain_name)
+    storage_manager = StorageManager(domain_name=domain_name)
     
     # Load existing hashes for deduplication
     image_processor.downloaded_hashes = storage_manager.get_existing_hashes()
-
-    print(f"🌐 开始爬取网站: {args.url}")
-    print(f"   最大图片数: {args.max_images}")
-    print(f"   爬取深度: {args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH}")
 
     try:
         # Scrape images from website
@@ -218,7 +227,8 @@ async def cmd_crawl_site(args):
         print(f"✅ 网站爬取完成:")
         print(f"   发现图片: {len(search_results)}")
         print(f"   成功下载: {saved_count}")
-        print(f"   保存位置: {Config.IMAGES_DIR}")
+        print(f"   保存位置: {Config.get_domain_images_dir(domain_name)}")
+        print(f"   元数据文件: {Config.get_domain_metadata_file(domain_name)}")
 
     except Exception as e:
         logging.error(f"Website crawling failed: {e}")
@@ -229,8 +239,7 @@ def cmd_config(args):
     """Handle config command"""
     print("\n⚙️  Current Configuration:")
     print(f"  Data directory: {Config.DATA_DIR}")
-    print(f"  Images directory: {Config.IMAGES_DIR}")
-    print(f"  Metadata file: {Config.METADATA_FILE}")
+    print(f"  Storage: Domain-based (data/{{domain_name}}/)")
     print(f"  Min image size: {Config.MIN_IMAGE_WIDTH}×{Config.MIN_IMAGE_HEIGHT}")
     print(f"  Max file size: {Config.MAX_FILE_SIZE / (1024 * 1024):.1f} MB")
     print(f"  Request delay: {Config.REQUEST_DELAY}s")
@@ -312,9 +321,9 @@ def create_parser():
         help=f"Maximum crawling depth (default: {Config.MAX_SCRAPING_DEPTH})"
     )
     crawl_site_parser.add_argument(
-        "--ignore-robots",
+        "--respect-robots",
         action="store_true",
-        help="Ignore robots.txt restrictions"
+        help="Respect robots.txt restrictions"
     )
 
     # Resume command
