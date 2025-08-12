@@ -1,7 +1,7 @@
 [project]
 name = "boxhunt"
 version = "0.1.0"
-description = "A web scraper for collecting cardboard box images from various sources"
+description = "A web scraper for collecting cardboard box images and a 3D box creation tool"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
@@ -18,6 +18,13 @@ dependencies = [
     "tqdm>=4.65.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
+    # GUI and 3D dependencies
+    "PySide6>=6.6.0",
+    "PyOpenGL>=3.1.6",
+    "PyOpenGL-accelerate>=3.1.6",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "trimesh>=4.0.0",
 ]
 
 [project.optional-dependencies]

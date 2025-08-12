@@ -161,6 +161,26 @@ def cmd_export(args):
         print("\n❌ Export failed")
 
 
+def cmd_gui(args):
+    """Handle GUI command"""
+    try:
+        from .gui_main import main as gui_main
+
+        print("🎨 Starting BoxHunt GUI...")
+        sys.exit(gui_main())
+    except ImportError as e:
+        print("❌ GUI dependencies not available:")
+        print(f"   {e}")
+        print("\n💡 Install GUI dependencies:")
+        print("   uv sync  # This should install all dependencies including GUI ones")
+        print("   # OR manually:")
+        print("   pip install PySide6 PyOpenGL PyOpenGL-accelerate numpy scipy trimesh")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error starting GUI: {e}")
+        sys.exit(1)
+
+
 async def cmd_crawl_site(args):
     """Handle crawl-site command"""
     from urllib.parse import urlparse
@@ -371,6 +391,9 @@ def create_parser():
     # Config command
     subparsers.add_parser("config", help="Show current configuration")
 
+    # GUI command
+    subparsers.add_parser("gui", help="Launch the 3D box creation GUI")
+
     return parser
 
 
@@ -406,6 +429,8 @@ def main():
                 cmd_export(args)
             elif args.command == "config":
                 cmd_config(args)
+            elif args.command == "gui":
+                cmd_gui(args)
             else:
                 print(f"Unknown command: {args.command}")
                 parser.print_help()
@@ -431,6 +456,8 @@ def main():
                 cmd_export(args)
             elif args.command == "config":
                 cmd_config(args)
+            elif args.command == "gui":
+                cmd_gui(args)
         except Exception as e:
             logging.error(f"Unexpected error: {e}")
             print(f"\n❌ Error: {e}")

@@ -137,11 +137,17 @@ dependencies = [
     { name = "beautifulsoup4" },
     { name = "imagehash" },
     { name = "lxml" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pillow" },
+    { name = "pyopengl" },
+    { name = "pyopengl-accelerate" },
+    { name = "pyside6" },
     { name = "python-dotenv" },
     { name = "requests" },
+    { name = "scipy" },
     { name = "tqdm" },
+    { name = "trimesh" },
 ]
 
 [package.optional-dependencies]
@@ -162,13 +168,19 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "imagehash", specifier = ">=4.3.1" },
     { name = "lxml", specifier = ">=4.9.0" },
+    { name = "numpy", specifier = ">=1.24.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pillow", specifier = ">=10.0.0" },
+    { name = "pyopengl", specifier = ">=3.1.6" },
+    { name = "pyopengl-accelerate", specifier = ">=3.1.6" },
+    { name = "pyside6", specifier = ">=6.6.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "scipy", specifier = ">=1.11.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
+    { name = "trimesh", specifier = ">=4.0.0" },
 ]
 provides-extras = ["dev"]
 
@@ -798,6 +810,92 @@ wheels = [
 ]
 
 [[package]]
+name = "pyopengl"
+version = "3.1.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/42/71080db298df3ddb7e3090bfea8fd7c300894d8b10954c22f8719bd434eb/pyopengl-3.1.9.tar.gz", hash = "sha256:28ebd82c5f4491a418aeca9672dffb3adbe7d33b39eada4548a5b4e8c03f60c8", size = 1913642, upload-time = "2025-01-20T02:17:53.263Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/44/8634af40b0db528b5b37e901c0dc67321354880d251bf8965901d57693a5/PyOpenGL-3.1.9-py3-none-any.whl", hash = "sha256:15995fd3b0deb991376805da36137a4ae5aba6ddbb5e29ac1f35462d130a3f77", size = 3190341, upload-time = "2025-01-20T02:17:50.913Z" },
+]
+
+[[package]]
+name = "pyopengl-accelerate"
+version = "3.1.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9d/9e/a87f972148971c785773dcc792226530ff78840420e34b3cc51b221693a2/pyopengl_accelerate-3.1.9.tar.gz", hash = "sha256:85957c7c76975818ff759ec9243f9dc7091ef6f373ea37a2eb50c320fd9a86f3", size = 21799, upload-time = "2025-01-20T02:19:47.081Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/ba/2b17bfc85c079653b3736568d42a4aa1af8606a29c0f40c48af221ee8718/PyOpenGL_accelerate-3.1.9-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:97e2e2daddab0ed8d690871ddff976e82a480cdef7d6df39b69d79afa3ce3430", size = 445399, upload-time = "2025-01-20T02:18:21.254Z" },
+    { url = "https://files.pythonhosted.org/packages/85/c9/aacc08c5b8f0e3599ed7a2fb258d2ec0cc4aae0dbda6b776a9d375c3ecad/PyOpenGL_accelerate-3.1.9-cp311-cp311-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f7bbef8a910d37e9e18ed5f8ff8dff40c9161e84b90e96c04bed5c147bb3edc6", size = 2992556, upload-time = "2025-01-20T02:18:23.449Z" },
+    { url = "https://files.pythonhosted.org/packages/09/f7/8c9b83a64cb76bb79afc8e64ae37666e35f30bc3a9731235ff9d79a39c85/PyOpenGL_accelerate-3.1.9-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d63cef49346ba556632a4a163025628b4872ca499d760d4e6410adcbefa84949", size = 3198117, upload-time = "2025-01-20T02:18:25.469Z" },
+    { url = "https://files.pythonhosted.org/packages/01/f1/4e673ffacda41b1f06d23f202a52f9940f83d87fdaebb3286b6b13a44f15/PyOpenGL_accelerate-3.1.9-cp311-cp311-musllinux_1_2_i686.whl", hash = "sha256:182f8b3e8ac19f4a5f7fe1178037ae840552351bcd264f5c34739db676467377", size = 2917142, upload-time = "2025-01-20T02:18:28.163Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/df/03aa69ffa2a7128bccc6268e6b5cbfa4e0dc197488d7ac7870545b082d1f/PyOpenGL_accelerate-3.1.9-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:659ac06bc6a6031fef5e3b5c965d61d5763833e896b7b4620cb4e036180d60db", size = 3076446, upload-time = "2025-01-20T02:18:30.99Z" },
+    { url = "https://files.pythonhosted.org/packages/03/3f/90bc574855baedbe010a0d5ea91c4f6164b5bc4fa95199490cb648abcfdb/PyOpenGL_accelerate-3.1.9-cp311-cp311-win32.whl", hash = "sha256:f544f97de76323c6e137ee8c859a81b654445273f159e63fdc1239f220376ba5", size = 364057, upload-time = "2025-01-20T02:18:33.304Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/0c/ca92a6630297b154236deaba5f5be67c34426e765ccc7c4bd26308da8fde/PyOpenGL_accelerate-3.1.9-cp311-cp311-win_amd64.whl", hash = "sha256:d7d2b0ac17ea369eb6e063378c8b6c0addf095c82f5879cd500a407c01127619", size = 426489, upload-time = "2025-01-20T02:18:34.578Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/8f/dc306a0c35d6953e33f672d7ab33c49091e39fea97d212ab707a65de4275/PyOpenGL_accelerate-3.1.9-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:7981bc643edd6d30e35d08b393ec382773463e3aabb364695df51b9adbcf9e20", size = 450232, upload-time = "2025-01-20T02:18:35.892Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/8e/4780e54fe4a334f9e47075ad1b3f0d57775cdc9b33571c26221a3672f434/PyOpenGL_accelerate-3.1.9-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:15a4c6a11dcfc9eec311f3596cda62fff2965ad6d62919415fb6573f7ef8c1c9", size = 2986440, upload-time = "2025-01-20T02:18:37.602Z" },
+    { url = "https://files.pythonhosted.org/packages/42/ae/67ddc9674d07c1900b0f094a16d2fa996492ffb25ad974e5af4e53dcad22/PyOpenGL_accelerate-3.1.9-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2b6f1f3680f33f10e67bb679ac0fb6946905a22e52d2eba71a66bf9d3ef94b33", size = 3217129, upload-time = "2025-01-20T02:18:39.443Z" },
+    { url = "https://files.pythonhosted.org/packages/05/ff/3f488220088baeb9699d2ad26788218efa9b6963346de52eb476601a071d/PyOpenGL_accelerate-3.1.9-cp312-cp312-musllinux_1_2_i686.whl", hash = "sha256:b58837914dbd6f89ba831d4a3dede1595a74485d7b476483966f08bac9bd4320", size = 2935214, upload-time = "2025-01-20T02:18:41.104Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/71/460665cf2d56c5e0fc07241272a39199ed40df6a6db5fb7fb3a224d614a8/PyOpenGL_accelerate-3.1.9-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:4cd6d767de3c81b538682058c6114587bfa5e4a263d0f4b023b0404fce07d6d7", size = 3090475, upload-time = "2025-01-20T02:18:43.467Z" },
+    { url = "https://files.pythonhosted.org/packages/20/82/850e4972244eb65dbfac64bf46f504b04c29b97526ba62a5ecacb9a9cbc5/PyOpenGL_accelerate-3.1.9-cp312-cp312-win32.whl", hash = "sha256:8042393b3869b455d67b60e6c87dc349ae89d3a0858f8018f8bd8d69f323ac3c", size = 360799, upload-time = "2025-01-20T02:18:45.743Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/09/4c4975841c9e88ed9ef79940b0f714fc1af40b653f0697a4b37b7ba4eb92/PyOpenGL_accelerate-3.1.9-cp312-cp312-win_amd64.whl", hash = "sha256:a78731c88a81a895cf9849139bffb40cbea9fb0e640ccc3cbc38ea909e1234f4", size = 422447, upload-time = "2025-01-20T02:18:47.764Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/69/896cab645d4f7c755eaaea71834811cd19e09003a9dbfa9273ba0aa42e10/PyOpenGL_accelerate-3.1.9-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:95fd40a537637355fb7f0a03c055fbad6efdeea059607f4966b7631b580353c5", size = 438474, upload-time = "2025-01-20T02:18:49.162Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/a3/3c8770ebfef3530f71722743c04632c3594b544461ce10ee4bc13f6aa6e9/PyOpenGL_accelerate-3.1.9-cp313-cp313-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:d5992ebf8befb6e45c6198e45f0f2d8fa26c30cbae68a1f08d6646c6d95b5605", size = 2899068, upload-time = "2025-01-20T02:18:50.661Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/95/22c07ec2414928ddb50eb0e35d6cd6343ffef6ad74f42e86fefbaaa6b04e/PyOpenGL_accelerate-3.1.9-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:10ab017316dc8bced13b2426b9cc6ab9aeb627ca020e9bc0836ef92b5e0942ea", size = 3119442, upload-time = "2025-01-20T02:18:52.281Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/76/8095f7c5b68376cbde9e32c4be20089fb055558010580fdb3eff6f9c2e99/PyOpenGL_accelerate-3.1.9-cp313-cp313-musllinux_1_2_i686.whl", hash = "sha256:d80dab32facd0195e8213754a7a71ba9d9343e413ff84bd8e552d7a66552b254", size = 2853493, upload-time = "2025-01-20T02:18:53.948Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/21/9acfae57fa636290380b7c43e4bd57fc513f04b75a036372306458be80ac/PyOpenGL_accelerate-3.1.9-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:eb56fa15bdf1a029a8bf1682f5af436b02e721fcd1b43cf05eeda99ca9b6a9e1", size = 3006703, upload-time = "2025-01-20T02:18:55.746Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/ab/5a3c821ed47a7bce8dfe6d35a9dd903b2906f5cf8380d29620ca86cb4d02/PyOpenGL_accelerate-3.1.9-cp313-cp313-win32.whl", hash = "sha256:19dda83f7c96f598b8bc895ee2199bd1c45d064993175bbbe251905b9d9b40a4", size = 357167, upload-time = "2025-01-20T02:18:57.844Z" },
+    { url = "https://files.pythonhosted.org/packages/03/d3/b0b5b4c5404d7269458f4297b2fe86017daed8f29f40f07eb25ee51c902e/PyOpenGL_accelerate-3.1.9-cp313-cp313-win_amd64.whl", hash = "sha256:ed02cc9abd7662e787bc7491bf7f78f6536cf550a148d0fbff6727bed9b57124", size = 417563, upload-time = "2025-01-20T02:18:59.803Z" },
+]
+
+[[package]]
+name = "pyside6"
+version = "6.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyside6-addons" },
+    { name = "pyside6-essentials" },
+    { name = "shiboken6" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/91/8e9c7f7e90431297de9856e90a156ade9420977e26d87996909c63f30bd2/PySide6-6.9.1-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:f843ef39970a2f79757810fffd7b8e93ac42a3de9ea62f2a03648cde57648aed", size = 558097, upload-time = "2025-06-03T13:20:03.739Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/ff/04d1b6b30edd24d761cc30d964860f997bdf37d06620694bf9aab35eec3a/PySide6-6.9.1-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:db44ac08b8f7ac1b421bc1c6a44200d03f08d80dc7b3f68dfdb1684f30f41c17", size = 558239, upload-time = "2025-06-03T13:20:06.205Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/b4/ca076c55c11a8e473363e05aa82c5c03dd7ba8f17b77cc9311ce17213193/PySide6-6.9.1-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:531a6e67c429b045674d57fe9864b711eb59e4cded753c2640982e368fd468d1", size = 558239, upload-time = "2025-06-03T13:20:08.257Z" },
+    { url = "https://files.pythonhosted.org/packages/83/ff/95c941f53b0faebc27dbe361d8e971b77f504b9cf36f8f5d750fd82cd6fc/PySide6-6.9.1-cp39-abi3-win_amd64.whl", hash = "sha256:c82dbb7d32bbdd465e01059174f71bddc97de152ab71bded3f1907c40f9a5f16", size = 564571, upload-time = "2025-06-03T13:20:10.321Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/ef/0aa5e910fa4e9770db6b45c23e360a52313922e0ca71fc060a57db613de1/PySide6-6.9.1-cp39-abi3-win_arm64.whl", hash = "sha256:1525d63dc6dc425b8c2dc5bc01a8cb1d67530401449f3a3490c09a14c095b9f9", size = 401793, upload-time = "2025-06-03T13:20:12.108Z" },
+]
+
+[[package]]
+name = "pyside6-addons"
+version = "6.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyside6-essentials" },
+    { name = "shiboken6" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/e2/39b9e04335d7ac782b6459bf7abec90c36b8efaac5a88ef818e972c59387/PySide6_Addons-6.9.1-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:7be0708fa89715c282541fca47e2ba97c0c8d2886e0236ef994b2dd8f52aacdd", size = 316212438, upload-time = "2025-06-03T13:06:15.027Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/6f/691d7039a6f7943522a770b713ecd85fa169688dfdd65ddd4db1699d01b6/PySide6_Addons-6.9.1-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:da7869b02e3599d26546fad582db4656060786bc5ec8ece5ec9ee8aa8b42371c", size = 166690468, upload-time = "2025-06-03T13:06:34.962Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/08/a264db09ad35819643d910cd4c73a86f72f23b7092f8ebc7e51dcca53a86/PySide6_Addons-6.9.1-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:53fd08c8152b6ba8c435458afd189835ba905793a5077a2bb0b1b11222b375d4", size = 162466096, upload-time = "2025-06-03T13:08:58.065Z" },
+    { url = "https://files.pythonhosted.org/packages/84/be/a849402f7e73d137b5ae8b4370a49b0cf0e0c02f028b845782cb743e4995/PySide6_Addons-6.9.1-cp39-abi3-win_amd64.whl", hash = "sha256:cd93a3a5e3886cd958f3a5acc7c061c24f10a394ce9f4ce657ac394544ca7ec2", size = 143150906, upload-time = "2025-06-03T13:09:12.762Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/f1/1bb6b5859aff4e2b3f5ef789b9cee200811a9f469f04d9aa7425e816622b/PySide6_Addons-6.9.1-cp39-abi3-win_arm64.whl", hash = "sha256:4f589631bdceb518080ae9c9fa288e64f092cd5bebe25adc8ad89e8eadd4db29", size = 26938762, upload-time = "2025-06-03T13:09:20.009Z" },
+]
+
+[[package]]
+name = "pyside6-essentials"
+version = "6.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "shiboken6" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/59/714874db9ef3bbbbda654fd3223248969bea02ec1a5bfdd1c941c4e97749/PySide6_Essentials-6.9.1-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:ed43435a70e018e1c22efcaf34a9430b83cfcad716dba661b03de21c13322fab", size = 132957077, upload-time = "2025-06-03T13:11:52.629Z" },
+    { url = "https://files.pythonhosted.org/packages/59/6a/ea0db68d40a1c487fd255634896f4e37b6560e3ef1f57ca5139bf6509b1f/PySide6_Essentials-6.9.1-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:e5da48883f006c6206ef85874db74ddebcdf69b0281bd4f1642b1c5ac1d54aea", size = 96416183, upload-time = "2025-06-03T13:12:48.945Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/2f/4243630d1733522638c4967d36018c38719d8b84f5246bf3d4c010e0aa9d/PySide6_Essentials-6.9.1-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:e46a2801c9c6098025515fd0af6c594b9e9c951842f68b8f6f3da9858b9b26c2", size = 94171343, upload-time = "2025-06-03T13:12:59.426Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/a9/a8e0209ba9116f2c2db990cfb79f2edbd5a3a428013be2df1f1cddd660a9/PySide6_Essentials-6.9.1-cp39-abi3-win_amd64.whl", hash = "sha256:ad1ac94011492dba33051bc33db1c76a7d6f815a81c01422cb6220273b369145", size = 72435676, upload-time = "2025-06-03T13:13:08.805Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/e4/23268c57e775a1a4d2843d288a9583a47f2e4b3977a9ae93cb9ded1a4ea5/PySide6_Essentials-6.9.1-cp39-abi3-win_arm64.whl", hash = "sha256:35c2c2bb4a88db74d11e638cf917524ff35785883f10b439ead07960a5733aa4", size = 49483707, upload-time = "2025-06-03T13:13:16.399Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "8.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1008,6 +1106,18 @@ wheels = [
 ]
 
 [[package]]
+name = "shiboken6"
+version = "6.9.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/98/98/34d4d25b79055959b171420d47fcc10121aefcbb261c91d5491252830e31/shiboken6-6.9.1-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:40e92afc88da06b5100c56b761e59837ff282166e9531268f3d910b6128e621e", size = 406159, upload-time = "2025-06-03T13:16:45.104Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/07/53b2532ecd42ff925feb06b7bb16917f5f99f9c3470f0815c256789d818b/shiboken6-6.9.1-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:efcdfa8655d34aaf8d7a0c7724def3440bd46db02f5ad3b1785db5f6ccb0a8ff", size = 206756, upload-time = "2025-06-03T13:16:46.528Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/b0/75b86ee3f7b044e6a87fbe7abefd1948ca4ae5fcde8321f4986a1d9eaa5e/shiboken6-6.9.1-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:efcf75d48a29ae072d0bf54b3cd5a59ae91bb6b3ab7459e17c769355486c2e0b", size = 203233, upload-time = "2025-06-03T13:16:48.264Z" },
+    { url = "https://files.pythonhosted.org/packages/30/56/00af281275aab4c79e22e0ea65feede0a5c6da3b84e86b21a4a0071e0744/shiboken6-6.9.1-cp39-abi3-win_amd64.whl", hash = "sha256:209ccf02c135bd70321143dcbc5023ae0c056aa4850a845955dd2f9b2ff280a9", size = 1153587, upload-time = "2025-06-03T13:16:50.454Z" },
+    { url = "https://files.pythonhosted.org/packages/de/ce/6ccd382fbe1a96926c5514afa6f2c42da3a9a8482e61f8dfc6068a9ca64f/shiboken6-6.9.1-cp39-abi3-win_arm64.whl", hash = "sha256:2a39997ce275ced7853defc89d3a1f19a11c90991ac6eef3435a69bb0b7ff1de", size = 1831623, upload-time = "2025-06-03T13:16:52.468Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1035,6 +1145,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540, upload-time = "2024-11-24T20:12:19.698Z" },
+]
+
+[[package]]
+name = "trimesh"
+version = "4.7.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/20/d9/e31931cc6ee9b5b4f5fd09a0b176c6eac665d990fa02723ac5092a60a11a/trimesh-4.7.3.tar.gz", hash = "sha256:b4409f505da6a703ed968234b6ea5058ffbcd7ea0bb93459012b7f5d01712abc", size = 802136, upload-time = "2025-08-11T17:26:26.027Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/79/9563bd90b2b964e85424b6e41e58c39d812d31f62198140b87c823e19ed9/trimesh-4.7.3-py3-none-any.whl", hash = "sha256:4091a4ecf08dc141ac554f552e19168fce872ab51fa4512bf73a06bbe2360640", size = 709843, upload-time = "2025-08-11T17:26:23.531Z" },
 ]
 
 [[package]]
