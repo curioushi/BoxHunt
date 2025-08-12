@@ -128,6 +128,7 @@ class CropPreviewWidget(QWidget):
 
         self.current_image = None  # PIL Image
         self.crop_items = []
+        self.crop_data = []  # Store current crop data for export
 
         self.setup_ui()
 
@@ -282,6 +283,7 @@ class CropPreviewWidget(QWidget):
             self.clear_crops()
 
             if not annotations or not self.current_image:
+                self.crop_data = []  # Clear crop data
                 self.show_info_message("No annotations to preview")
                 # Emit empty crops to clear 3D viewer textures
                 self.crops_updated.emit([])
@@ -358,6 +360,9 @@ class CropPreviewWidget(QWidget):
                     continue
 
             if crops_data:
+                # Store crop data for export
+                self.crop_data = crops_data
+
                 # Use adaptive layout
                 self.layout_crops_adaptive(len(crops_data))
 
@@ -367,11 +372,13 @@ class CropPreviewWidget(QWidget):
                     f"Generated {len(crops_data)} perspective-corrected 512×512 previews"
                 )
             else:
+                self.crop_data = []  # Clear crop data
                 self.show_info_message("No valid crops to display")
                 # Emit empty crops to clear 3D viewer textures
                 self.crops_updated.emit([])
 
         except Exception as e:
+            self.crop_data = []  # Clear crop data on error
             self.status_message.emit(f"Error updating crops: {str(e)}")
             self.show_info_message("Error generating crop previews")
             # Emit empty crops to clear 3D viewer textures on error

@@ -2,6 +2,8 @@
 Main window for BoxHunt 3D box creation tool
 """
 
+import json
+import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -36,6 +38,7 @@ class BoxMakerMainWindow(QMainWindow):
 
         self.current_image_path = None
         self.annotations = []  # List of annotation rectangles
+        self.output_directory = os.getcwd()  # Default to current working directory
 
         self.setup_ui()
         self.setup_connections()
@@ -162,6 +165,21 @@ class BoxMakerMainWindow(QMainWindow):
         open_action.triggered.connect(self.open_image)
         toolbar.addAction(open_action)
 
+        toolbar.addSeparator()
+
+        # Export textures button
+        export_action = QAction("Export", self)
+        export_action.setShortcut("Ctrl+E")
+        export_action.setToolTip("Export all face textures to files")
+        export_action.triggered.connect(self.export_textures)
+        toolbar.addAction(export_action)
+
+        # Set output directory button
+        set_output_dir_action = QAction("Set Output Dir", self)
+        set_output_dir_action.setToolTip("Set output directory for exports")
+        set_output_dir_action.triggered.connect(self.set_output_directory)
+        toolbar.addAction(set_output_dir_action)
+
     def setup_connections(self):
         """Setup signal-slot connections"""
         # Connect file browser to image loading
@@ -196,6 +214,12 @@ class BoxMakerMainWindow(QMainWindow):
         """Load image from file path"""
         try:
             self.current_image_path = image_path
+
+            # Clear all annotations and textures when loading new image
+            self.image_annotation.clear_annotations()
+            self.box3d_viewer.clear_all_textures()
+
+            # Load the new image
             self.image_annotation.load_image(image_path)
             self.crop_preview.set_image(image_path)  # Set image for crop preview
             self.status_bar.showMessage(f"Loaded: {Path(image_path).name}")
@@ -204,3 +228,142 @@ class BoxMakerMainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load image: {str(e)}")
             logger.error(f"Error loading image: {str(e)}")
+
+    def set_output_directory(self):
+        """Set the output directory for exports"""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Output Directory",
+            self.output_directory,
+        )
+
+        if directory:
+            self.output_directory = directory
+            self.status_bar.showMessage(f"Output directory set to: {directory}")
+            logger.info(f"Output directory changed to: {directory}")
+
+    def get_texture_fallback_map(self):
+        """Get the texture fallback priority mapping"""
+        return {
+            "front": ["back", "left", "right", "top", "bottom"],
+            "back": ["front", "right", "left", "top", "bottom"],
+            "left": ["right", "front", "back", "top", "bottom"],
+            "right": ["left", "back", "front", "top", "bottom"],
+            "top": ["bottom", "front", "back", "left", "right"],
+            "bottom": ["top", "front", "back", "left", "right"],
+        }
+
+    def export_textures(self):
+        """Export all face textures to files with fallback strategy"""
+        if not self.current_image_path:
+            QMessageBox.warning(
+                self, "Warning", "No image loaded. Please load an image first."
+            )
+            return
+
+        # Get crop data from crop preview
+        crops_data = (
+            self.crop_preview.crop_data
+            if hasattr(self.crop_preview, "crop_data")
+            else []
+        )
+
+        if not crops_data:
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "No crop data available. Please annotate some faces first.",
+            )
+            return
+
+        try:
+            # Create output directory structure
+            image_name = Path(self.current_image_path).stem
+            export_dir = Path(self.output_directory) / image_name
+            export_dir.mkdir(parents=True, exist_ok=True)
+
+            # Build available textures mapping
+            available_textures = {}
+            for crop in crops_data:
+                label = crop.get("label", "").lower()
+                if label and "image" in crop:
+                    available_textures[label] = crop["image"]
+
+            # Get fallback mapping
+            fallback_map = self.get_texture_fallback_map()
+            face_names = ["front", "back", "left", "right", "top", "bottom"]
+
+            exported_count = 0
+
+            # Export each face with fallback strategy
+            for face_name in face_names:
+                texture_image = None
+                source_face = face_name
+
+                # Try to get texture for this face
+                if face_name in available_textures:
+                    texture_image = available_textures[face_name]
+                else:
+                    # Apply fallback strategy
+                    for fallback_face in fallback_map[face_name]:
+                        if fallback_face in available_textures:
+                            texture_image = available_textures[fallback_face]
+                            source_face = fallback_face
+                            logger.info(
+                                f"Using {fallback_face} texture for {face_name} face"
+                            )
+                            break
+
+                # Export the texture if available
+                if texture_image:
+                    output_path = export_dir / f"{face_name}.png"
+                    texture_image.save(output_path, "PNG")
+                    exported_count += 1
+
+                    if source_face != face_name:
+                        logger.info(
+                            f"Exported {face_name}.png (using {source_face} texture)"
+                        )
+                    else:
+                        logger.info(f"Exported {face_name}.png")
+                else:
+                    logger.warning(f"No texture available for {face_name} face")
+
+            # Export dimension.json with current box dimensions
+            try:
+                dimensions = {
+                    "width": self.box3d_viewer.renderer.box_width,
+                    "height": self.box3d_viewer.renderer.box_height,
+                    "length": self.box3d_viewer.renderer.box_depth,
+                }
+
+                dimension_path = export_dir / "dimensions.json"
+                with open(dimension_path, "w", encoding="utf-8") as f:
+                    json.dump(dimensions, f, indent=2, ensure_ascii=False)
+
+                logger.info(f"Exported dimensions.json: {dimensions}")
+
+            except Exception as e:
+                logger.error(f"Failed to export dimensions.json: {str(e)}")
+
+            # Show success message
+            if exported_count > 0:
+                QMessageBox.information(
+                    self,
+                    "Export Complete",
+                    f"Exported {exported_count} texture files and dimensions.json to:\n{export_dir}",
+                )
+                self.status_bar.showMessage(
+                    f"Exported {exported_count} textures and dimensions to {export_dir}"
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Export Failed",
+                    "No textures were exported. Please ensure you have annotated at least one face.",
+                )
+
+        except Exception as e:
+            error_msg = f"Failed to export textures: {str(e)}"
+            QMessageBox.critical(self, "Export Error", error_msg)
+            logger.error(error_msg)

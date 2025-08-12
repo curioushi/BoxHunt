@@ -471,6 +471,12 @@ class Box3DRenderer(QOpenGLWidget):
         self.camera_distance = max(2.0, min(20.0, self.camera_distance))
         self.update()
 
+    def clear_all_textures(self):
+        """Clear all face textures"""
+        for face_name in list(self.face_names):
+            self.clear_face_texture(face_name)
+        self.update()
+
     def set_box_dimensions(self, width: float, height: float, depth: float = None):
         """Set box dimensions"""
         self.box_width = width
@@ -543,6 +549,17 @@ class Box3DViewerWidget(QWidget):
         log_val = log_min + (slider_pos / 1000.0) * (log_max - log_min)
         return 10**log_val
 
+    def get_texture_fallback_map(self):
+        """Get the texture fallback priority mapping (only first priority for 3D viewer)"""
+        return {
+            "front": "back",
+            "back": "front",
+            "left": "right",
+            "right": "left",
+            "top": "bottom",
+            "bottom": "top",
+        }
+
     def setup_ui(self):
         """Setup user interface"""
         layout = QVBoxLayout(self)
@@ -604,10 +621,15 @@ class Box3DViewerWidget(QWidget):
         # Control buttons
         button_layout = QHBoxLayout()
 
+        # Reset size button
+        reset_size_btn = QPushButton("Reset Size")
+        reset_size_btn.clicked.connect(self.reset_size)
+        button_layout.addWidget(reset_size_btn)
+
         # Reset view button
-        reset_btn = QPushButton("Reset View")
-        reset_btn.clicked.connect(self.renderer.reset_view)
-        button_layout.addWidget(reset_btn)
+        reset_view_btn = QPushButton("Reset View")
+        reset_view_btn.clicked.connect(self.renderer.reset_view)
+        button_layout.addWidget(reset_view_btn)
 
         # Auto rotate toggle
         self.rotate_btn = QPushButton("Auto Rotate")
@@ -647,6 +669,24 @@ class Box3DViewerWidget(QWidget):
         # Keep depth fixed at 1.0
         self.renderer.set_box_dimensions(width, height, 1.0)
 
+    def reset_size(self):
+        """Reset box size to 1x1x1 meters"""
+        # Reset sliders to 1.0
+        target_value = self.linear_to_log_slider(1.0)
+
+        self.width_slider.setValue(target_value)
+        self.height_slider.setValue(target_value)
+
+        # Update labels
+        self.width_label.setText("1.00")
+        self.height_label.setText("1.00")
+
+        # Update 3D model
+        self.renderer.set_box_dimensions(1.0, 1.0, 1.0)
+
+        # Show status message
+        self.status_message.emit("Box size reset to 1.00 x 1.00 x 1.00")
+
     def update_box_from_crops(self, crops: list[dict]):
         """Update 3D box based on crop data"""
         self.crop_data = crops
@@ -657,24 +697,56 @@ class Box3DViewerWidget(QWidget):
 
         # Analyze crops to estimate box dimensions and apply textures
         if crops:
-            # Apply textures to corresponding faces
-            texture_count = 0
+            # Build available textures mapping
+            available_textures = {}
             for crop in crops:
                 label = crop.get("label", "").lower()
                 image = crop.get("image")  # PIL Image
-
                 if label and image and label in self.renderer.face_names:
-                    self.renderer.set_face_texture(label, image)
+                    available_textures[label] = image
+
+            # Get fallback mapping
+            fallback_map = self.get_texture_fallback_map()
+
+            # Apply textures to all faces with fallback strategy
+            texture_count = 0
+            for face_name in self.renderer.face_names:
+                texture_image = None
+                source_face = face_name
+
+                # Try to get texture for this face
+                if face_name in available_textures:
+                    texture_image = available_textures[face_name]
+                else:
+                    # Apply symmetry fallback (only first priority)
+                    fallback_face = fallback_map.get(face_name)
+                    if fallback_face and fallback_face in available_textures:
+                        texture_image = available_textures[fallback_face]
+                        source_face = fallback_face
+
+                # Apply texture if available
+                if texture_image:
+                    self.renderer.set_face_texture(face_name, texture_image)
                     texture_count += 1
+
+                    if source_face != face_name:
+                        # Log when using symmetry fallback
+                        pass  # We don't log in 3D viewer to avoid spam
 
             # Don't auto-adjust dimensions - user controls them manually
             # Only apply textures, keep current box dimensions unchanged
 
-            self.status_message.emit(
-                f"Updated 3D model from {len(crops)} crops ({texture_count} textures applied)"
-            )
+            applied_msg = f"Applied {texture_count} textures to 3D model"
+            if texture_count > len(available_textures):
+                applied_msg += f" (with {texture_count - len(available_textures)} symmetry fallbacks)"
+
+            self.status_message.emit(applied_msg)
         else:
             self.status_message.emit("No crop data for 3D model")
+
+    def clear_all_textures(self):
+        """Clear all textures from the renderer"""
+        self.renderer.clear_all_textures()
 
     def export_model(self, file_path: str) -> bool:
         """Export 3D model to file"""
