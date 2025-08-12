@@ -36,11 +36,6 @@ class GlobalLogger:
         if handler not in self._handlers:
             self._handlers.append(handler)
 
-    def remove_handler(self, handler: LogHandler) -> None:
-        """Remove a log handler"""
-        if handler in self._handlers:
-            self._handlers.remove(handler)
-
     def _log(self, message: str, level: str) -> None:
         """Internal log method"""
         for handler in self._handlers:

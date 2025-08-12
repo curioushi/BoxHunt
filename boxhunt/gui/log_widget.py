@@ -2,10 +2,8 @@
 Log widget for displaying application messages
 """
 
-import logging
 from datetime import datetime
 
-from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -19,26 +17,6 @@ from PySide6.QtWidgets import (
 )
 
 
-class LogHandler(logging.Handler, QObject):
-    """Custom logging handler that emits signals"""
-
-    log_message = Signal(str, str, str)  # timestamp, level, message
-
-    def __init__(self):
-        logging.Handler.__init__(self)
-        QObject.__init__(self)
-
-    def emit(self, record: logging.LogRecord):
-        """Emit log record as signal"""
-        try:
-            timestamp = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
-            level = record.levelname
-            message = self.format(record)
-            self.log_message.emit(timestamp, level, message)
-        except Exception:
-            pass  # Avoid recursive logging errors
-
-
 class LogWidget(QWidget):
     """Widget for displaying log messages"""
 
@@ -50,12 +28,7 @@ class LogWidget(QWidget):
         self.log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         self.visible_levels = set(self.log_levels)
 
-        # Setup logging handler
-        self.log_handler = LogHandler()
-        self.log_handler.log_message.connect(self.add_log_message)
-
         self.setup_ui()
-        self.setup_logging()
 
     def setup_ui(self):
         """Setup user interface"""
@@ -140,36 +113,10 @@ class LogWidget(QWidget):
         critical_format.setFontWeight(QFont.Bold)
         self.formats["CRITICAL"] = critical_format
 
-    def setup_logging(self):
-        """Setup logging integration"""
-        # Get root logger
-        logger = logging.getLogger()
-
-        # Add our handler
-        logger.addHandler(self.log_handler)
-
-        # Set formatter
-        formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-        self.log_handler.setFormatter(formatter)
-
-        # Initial log message
-        self._internal_log("Log widget initialized", "INFO")
-
-    def add_log_message(self, timestamp: str, level: str, message: str):
-        """Add log message from logging handler"""
-        if level in self.visible_levels:
-            self.append_formatted_message(timestamp, level, message)
-
     def add_log(self, message: str, level: str = "INFO"):
         """Add log message directly (LogHandler interface)"""
         timestamp = datetime.now().strftime("%H:%M:%S")
 
-        if level in self.visible_levels:
-            self.append_formatted_message(timestamp, level, message)
-
-    def _internal_log(self, message: str, level: str = "INFO"):
-        """Internal logging method to avoid circular dependencies"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
         if level in self.visible_levels:
             self.append_formatted_message(timestamp, level, message)
 
@@ -218,19 +165,6 @@ class LogWidget(QWidget):
 
         # Note: This doesn't re-filter existing messages,
         # only affects new messages
-
-    def get_log_text(self) -> str:
-        """Get all log text"""
-        return self.log_text.toPlainText()
-
-    def save_log_to_file(self, file_path: str):
-        """Save log to file"""
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(self.get_log_text())
-            self._internal_log(f"Log saved to {file_path}", "INFO")
-        except Exception as e:
-            self._internal_log(f"Error saving log: {str(e)}", "ERROR")
 
 
 # Export the main class for external use
