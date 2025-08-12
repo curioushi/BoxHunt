@@ -151,14 +151,20 @@ class CropPreviewWidget(QWidget):
         if not self.crops_container or num_crops <= 0:
             return 180, 180
 
-        # Get available space
-        container_size = self.crops_container.size()
-        available_width = (
-            container_size.width() - 16
-        )  # Account for reduced margins (8+8)
-        available_height = (
-            container_size.height() - 16
-        )  # Account for reduced margins (8+8)
+        # Get available space from scroll area viewport if container size is not reliable
+        if hasattr(self, "scroll_area") and self.scroll_area.viewport():
+            viewport_size = self.scroll_area.viewport().size()
+            available_width = max(
+                viewport_size.width() - 16, 300
+            )  # Account for margins
+            available_height = max(
+                viewport_size.height() - 16, 200
+            )  # Account for margins
+        else:
+            # Fallback to container size
+            container_size = self.crops_container.size()
+            available_width = max(container_size.width() - 16, 300)
+            available_height = max(container_size.height() - 16, 200)
 
         # Get layout dimensions
         rows, cols = self.calculate_optimal_layout(num_crops)
@@ -220,12 +226,18 @@ class CropPreviewWidget(QWidget):
     def _delayed_resize(self):
         """Delayed resize handling to avoid too frequent updates"""
         if self.crop_items:
+            # Force geometry update to ensure correct container size
+            self.crops_container.updateGeometry()
+
             num_crops = len(self.crop_items)
             item_width, item_height = self.calculate_crop_size(num_crops)
 
             # Update each crop item size
             for crop_item in self.crop_items:
                 crop_item.set_size(item_width, item_height)
+
+            # Force layout update
+            self.crops_layout.update()
 
     def setup_ui(self):
         """Setup user interface"""

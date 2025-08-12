@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSlider,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -42,18 +41,18 @@ class Box3DRenderer(QOpenGLWidget):
             self.setStyleSheet("background-color: #f0f0f0;")
             return
 
-        # Box parameters
-        self.box_width = 2.0
-        self.box_height = 1.5
-        self.box_depth = 1.0
+        # Box parameters (in meters)
+        self.box_width = 1.0  # 1.0m width
+        self.box_height = 1.0  # 1.0m height
+        self.box_depth = 1.0  # 1.0m length (depth)
 
-        # Rotation
-        self.rotation_x = -15.0
-        self.rotation_y = 30.0
+        # Rotation - adjusted to view front, top, and right faces simultaneously
+        self.rotation_x = 25.0  # Look down from above to see the top
+        self.rotation_y = -25.0  # Look from front-right to see front and right faces
         self.rotation_z = 0.0
 
         # Camera
-        self.camera_distance = 8.0
+        self.camera_distance = 4.0
         self.camera_x = 0.0
         self.camera_y = 0.0
 
@@ -100,7 +99,7 @@ class Box3DRenderer(QOpenGLWidget):
             # Light properties
             light_ambient = [0.3, 0.3, 0.3, 1.0]
             light_diffuse = [0.8, 0.8, 0.8, 1.0]
-            light_position = [5.0, 5.0, 5.0, 1.0]
+            light_position = [3.0, 3.0, 5.0, 1.0]
 
             glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient)
             glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse)
@@ -498,10 +497,10 @@ class Box3DRenderer(QOpenGLWidget):
 
     def reset_view(self):
         """Reset view to default"""
-        self.rotation_x = -15.0
-        self.rotation_y = 30.0
+        self.rotation_x = 25.0  # Look down from above to see the top
+        self.rotation_y = -25.0  # Look from front-right to see front and right faces
         self.rotation_z = 0.0
-        self.camera_distance = 8.0
+        self.camera_distance = 4.0
         self.camera_x = 0.0
         self.camera_y = 0.0
         self.update()
@@ -517,6 +516,32 @@ class Box3DViewerWidget(QWidget):
 
         self.crop_data = []
         self.setup_ui()
+
+    def linear_to_log_slider(
+        self, value: float, min_val: float = 0.1, max_val: float = 10.0
+    ) -> int:
+        """Convert linear value to logarithmic slider position (0-1000)"""
+        if value <= min_val:
+            return 0
+        if value >= max_val:
+            return 1000
+        log_min = math.log10(min_val)
+        log_max = math.log10(max_val)
+        log_val = math.log10(value)
+        return int(1000 * (log_val - log_min) / (log_max - log_min))
+
+    def log_slider_to_linear(
+        self, slider_pos: int, min_val: float = 0.1, max_val: float = 10.0
+    ) -> float:
+        """Convert logarithmic slider position (0-1000) to linear value"""
+        if slider_pos <= 0:
+            return min_val
+        if slider_pos >= 1000:
+            return max_val
+        log_min = math.log10(min_val)
+        log_max = math.log10(max_val)
+        log_val = log_min + (slider_pos / 1000.0) * (log_max - log_min)
+        return 10**log_val
 
     def setup_ui(self):
         """Setup user interface"""
@@ -544,43 +569,35 @@ class Box3DViewerWidget(QWidget):
         controls_layout.setContentsMargins(10, 10, 10, 10)
         controls_layout.setSpacing(8)
 
-        # Width control
+        # Width control (logarithmic scale)
         width_layout = QHBoxLayout()
         width_layout.addWidget(QLabel("Width:"))
 
         self.width_slider = QSlider(Qt.Horizontal)
-        self.width_slider.setRange(50, 500)  # 0.5 to 5.0
-        self.width_slider.setValue(200)  # 2.0 default
+        self.width_slider.setRange(0, 1000)  # 0.1 to 10.0 m (logarithmic)
+        self.width_slider.setValue(self.linear_to_log_slider(1.0))  # 1.0m default
         self.width_slider.valueChanged.connect(self.update_width)
         width_layout.addWidget(self.width_slider)
 
-        self.width_spinbox = QSpinBox()
-        self.width_spinbox.setRange(50, 500)
-        self.width_spinbox.setValue(200)
-        self.width_spinbox.setSuffix(" cm")
-        self.width_spinbox.valueChanged.connect(self.width_slider.setValue)
-        self.width_slider.valueChanged.connect(self.width_spinbox.setValue)
-        width_layout.addWidget(self.width_spinbox)
+        self.width_label = QLabel("1.00")
+        self.width_label.setMinimumWidth(60)
+        width_layout.addWidget(self.width_label)
 
         controls_layout.addLayout(width_layout)
 
-        # Height control
+        # Height control (logarithmic scale)
         height_layout = QHBoxLayout()
         height_layout.addWidget(QLabel("Height:"))
 
         self.height_slider = QSlider(Qt.Horizontal)
-        self.height_slider.setRange(50, 500)  # 0.5 to 5.0
-        self.height_slider.setValue(150)  # 1.5 default
+        self.height_slider.setRange(0, 1000)  # 0.1 to 10.0 m (logarithmic)
+        self.height_slider.setValue(self.linear_to_log_slider(1.0))  # 1.0m default
         self.height_slider.valueChanged.connect(self.update_height)
         height_layout.addWidget(self.height_slider)
 
-        self.height_spinbox = QSpinBox()
-        self.height_spinbox.setRange(50, 500)
-        self.height_spinbox.setValue(150)
-        self.height_spinbox.setSuffix(" cm")
-        self.height_spinbox.valueChanged.connect(self.height_slider.setValue)
-        self.height_slider.valueChanged.connect(self.height_spinbox.setValue)
-        height_layout.addWidget(self.height_spinbox)
+        self.height_label = QLabel("1.00")
+        self.height_label.setMinimumWidth(60)
+        height_layout.addWidget(self.height_label)
 
         controls_layout.addLayout(height_layout)
 
@@ -605,23 +622,30 @@ class Box3DViewerWidget(QWidget):
         # Initial update
         self.update_dimensions()
 
-    def update_width(self, value):
-        """Update box width"""
-        width = value / 100.0  # Convert to float
-        self.renderer.set_box_dimensions(width, self.renderer.box_height)
-        self.status_message.emit(f"Width: {width:.1f}")
+    def update_width(self, slider_value):
+        """Update box width from logarithmic slider"""
+        width = self.log_slider_to_linear(slider_value)
+        self.renderer.set_box_dimensions(
+            width, self.renderer.box_height, self.renderer.box_depth
+        )
+        self.width_label.setText(f"{width:.2f}")
+        self.status_message.emit(f"Width: {width:.2f}")
 
-    def update_height(self, value):
-        """Update box height"""
-        height = value / 100.0  # Convert to float
-        self.renderer.set_box_dimensions(self.renderer.box_width, height)
-        self.status_message.emit(f"Height: {height:.1f}")
+    def update_height(self, slider_value):
+        """Update box height from logarithmic slider"""
+        height = self.log_slider_to_linear(slider_value)
+        self.renderer.set_box_dimensions(
+            self.renderer.box_width, height, self.renderer.box_depth
+        )
+        self.height_label.setText(f"{height:.2f}")
+        self.status_message.emit(f"Height: {height:.2f}")
 
     def update_dimensions(self):
         """Update all dimensions"""
-        width = self.width_slider.value() / 100.0
-        height = self.height_slider.value() / 100.0
-        self.renderer.set_box_dimensions(width, height)
+        width = self.log_slider_to_linear(self.width_slider.value())
+        height = self.log_slider_to_linear(self.height_slider.value())
+        # Keep depth fixed at 1.0
+        self.renderer.set_box_dimensions(width, height, 1.0)
 
     def update_box_from_crops(self, crops: list[dict]):
         """Update 3D box based on crop data"""
@@ -643,25 +667,8 @@ class Box3DViewerWidget(QWidget):
                     self.renderer.set_face_texture(label, image)
                     texture_count += 1
 
-            # Simple estimation based on crop sizes
-            total_area = sum(
-                crop.get("width", 0) * crop.get("height", 0) for crop in crops
-            )
-            avg_dimension = math.sqrt(total_area / len(crops)) if crops else 100
-
-            # Scale to reasonable dimensions
-            scale_factor = 200 / avg_dimension if avg_dimension > 0 else 1.0
-
-            # Set dimensions based on analysis
-            estimated_width = int(avg_dimension * scale_factor * 1.2)
-            estimated_height = int(avg_dimension * scale_factor * 0.8)
-
-            # Clamp values
-            estimated_width = max(50, min(500, estimated_width))
-            estimated_height = max(50, min(500, estimated_height))
-
-            self.width_slider.setValue(estimated_width)
-            self.height_slider.setValue(estimated_height)
+            # Don't auto-adjust dimensions - user controls them manually
+            # Only apply textures, keep current box dimensions unchanged
 
             self.status_message.emit(
                 f"Updated 3D model from {len(crops)} crops ({texture_count} textures applied)"
