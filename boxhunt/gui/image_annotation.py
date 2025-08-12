@@ -27,8 +27,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .utils import pil_to_qpixmap
 from .logger import logger
+from .utils import pil_to_qpixmap
 
 
 class AnnotationPolygon:
@@ -142,10 +142,12 @@ class ImageCanvas(QLabel):
             self.selected_annotation = None
 
             self.update()
-            
+
             # Log image loading (example of using global logger)
-            logger.info(f"Image loaded in annotation widget: {Path(image_path).name} ({pil_image.width}x{pil_image.height})")
-            
+            logger.info(
+                f"Image loaded in annotation widget: {Path(image_path).name} ({pil_image.width}x{pil_image.height})"
+            )
+
             self.status_message.emit(
                 f"Image loaded: {Path(image_path).name} ({pil_image.width}x{pil_image.height})"
             )
@@ -153,7 +155,7 @@ class ImageCanvas(QLabel):
         except Exception as e:
             # Log error (example of using global logger)
             logger.error(f"Failed to load image in annotation widget: {str(e)}")
-            
+
             self.status_message.emit(f"Error loading image: {str(e)}")
             raise
 

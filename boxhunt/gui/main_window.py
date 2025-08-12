@@ -97,7 +97,7 @@ class BoxMakerMainWindow(QMainWindow):
         # Right: Log widget
         self.log_widget = LogWidget()
         self.log_widget.setMinimumSize(400, 200)
-        
+
         # Register log widget with global logger
         logger.add_handler(self.log_widget)
 
@@ -118,7 +118,7 @@ class BoxMakerMainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
-        
+
         # Test global logger
         logger.info("BoxHunt application initialized")
 

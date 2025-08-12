@@ -166,7 +166,7 @@ class LogWidget(QWidget):
 
         if level in self.visible_levels:
             self.append_formatted_message(timestamp, level, message)
-    
+
     def _internal_log(self, message: str, level: str = "INFO"):
         """Internal logging method to avoid circular dependencies"""
         timestamp = datetime.now().strftime("%H:%M:%S")
