@@ -123,6 +123,12 @@ class ImageCanvas(QLabel):
         self.magnifier_at_bottom_right = False  # Position flag
         self.mouse_pos = QPoint(0, 0)  # Current mouse position
 
+        # Dragging settings
+        self.dragging_mode = False
+        self.dragged_annotation = None  # The annotation being dragged
+        self.dragged_point_index = -1  # Index of the point being dragged
+        self.drag_start_pos = QPoint(0, 0)  # Start position of drag
+
         self.setMinimumSize(400, 300)
         self.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
         self.setAlignment(Qt.AlignCenter)
@@ -220,6 +226,33 @@ class ImageCanvas(QLabel):
         # Adjust for image offset
         return scaled_point + self.image_offset
 
+    def find_corner_at_position(
+        self, widget_pos: QPoint
+    ) -> tuple[AnnotationPolygon, int]:
+        """Find if there's a corner point at the given position
+        Returns (annotation, point_index) or (None, -1) if no corner found
+        """
+        corner_radius = 8  # Pixels within which a corner can be grabbed
+
+        for annotation in self.annotations:
+            if not annotation.is_complete:
+                continue
+
+            for i, point in enumerate(annotation.points):
+                # Convert image coordinates to widget coordinates
+                image_point = QPoint(point[0], point[1])
+                widget_point = self.image_to_widget_coords(image_point)
+
+                # Check distance
+                dx = widget_pos.x() - widget_point.x()
+                dy = widget_pos.y() - widget_point.y()
+                distance = (dx * dx + dy * dy) ** 0.5
+
+                if distance <= corner_radius:
+                    return annotation, i
+
+        return None, -1
+
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events"""
         if self.original_pixmap.isNull():
@@ -229,6 +262,20 @@ class ImageCanvas(QLabel):
         image_pos = self.widget_to_image_coords(widget_pos)
 
         if event.button() == Qt.LeftButton:
+            # First check if we're clicking on a corner for dragging
+            corner_annotation, corner_index = self.find_corner_at_position(widget_pos)
+
+            if corner_annotation is not None and not self.drawing_mode:
+                # Start dragging a corner
+                self.dragging_mode = True
+                self.dragged_annotation = corner_annotation
+                self.dragged_point_index = corner_index
+                self.drag_start_pos = widget_pos
+                self.selected_annotation = corner_annotation
+                self.status_message.emit(
+                    f"Dragging corner {corner_index + 1} of {corner_annotation.label or 'annotation'}"
+                )
+                return
             # Check if clicking on existing annotation for selection
             clicked_annotation = None
             for annotation in self.annotations:
@@ -351,19 +398,37 @@ class ImageCanvas(QLabel):
         widget_pos = event.position().toPoint()
         image_pos = self.widget_to_image_coords(widget_pos)
 
-        # Update mouse position and magnifier state
-        self.mouse_pos = widget_pos
-        self.update_magnifier_position(widget_pos)
-        self.magnifier_visible = True
+        # Handle corner dragging
+        if (
+            self.dragging_mode
+            and self.dragged_annotation
+            and self.dragged_point_index >= 0
+        ):
+            # Update the dragged point position
+            old_point = self.dragged_annotation.points[self.dragged_point_index]
+            new_point = (image_pos.x(), image_pos.y())
+            self.dragged_annotation.points[self.dragged_point_index] = new_point
 
-        # Update status with mouse position and drawing progress
-        if self.drawing_mode and self.current_annotation:
-            progress = f"Drawing: {len(self.current_annotation.points)}/4 points"
+            # Emit change signal
+            self.annotations_changed.emit(self.get_annotations())
+            self.status_message.emit(
+                f"Dragging corner {self.dragged_point_index + 1}: "
+                f"({old_point[0]}, {old_point[1]}) → ({new_point[0]}, {new_point[1]})"
+            )
         else:
-            progress = f"Mouse: ({image_pos.x()}, {image_pos.y()})"
-        self.status_message.emit(progress)
+            # Update mouse position and magnifier state
+            self.mouse_pos = widget_pos
+            self.update_magnifier_position(widget_pos)
+            self.magnifier_visible = True
 
-        # Trigger repaint for magnifier
+            # Update status with mouse position and drawing progress
+            if self.drawing_mode and self.current_annotation:
+                progress = f"Drawing: {len(self.current_annotation.points)}/4 points"
+            else:
+                progress = f"Mouse: ({image_pos.x()}, {image_pos.y()})"
+            self.status_message.emit(progress)
+
+        # Trigger repaint
         self.update()
 
     def update_magnifier_position(self, mouse_pos: QPoint):
@@ -416,9 +481,15 @@ class ImageCanvas(QLabel):
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events"""
+        if event.button() == Qt.LeftButton and self.dragging_mode:
+            # End dragging mode
+            self.dragging_mode = False
+            annotation_label = self.dragged_annotation.label or "annotation"
+            self.status_message.emit(f"Finished dragging corner of {annotation_label}")
+            self.dragged_annotation = None
+            self.dragged_point_index = -1
         # For polygon mode, we don't need special release handling
         # Points are added on press events
-        pass
 
     def leaveEvent(self, event):
         """Handle mouse leave events"""
@@ -495,9 +566,33 @@ class ImageCanvas(QLabel):
         painter.drawPolygon(qpolygon)
 
         # Draw corner points
-        for point in widget_points:
-            painter.setBrush(QBrush(QColor(255, 255, 255)))
-            painter.setPen(QPen(QColor(0, 0, 0), 2))
+        for i, point in enumerate(widget_points):
+            # Highlight draggable corners for completed polygons
+            if annotation.is_complete:
+                # Draw outer ring to indicate draggable corner
+                if is_selected or annotation == self.dragged_annotation:
+                    painter.setBrush(QBrush(QColor(100, 150, 255, 150)))
+                    painter.setPen(QPen(QColor(50, 100, 200), 1))
+                    painter.drawEllipse(point, 8, 8)
+
+                # Draw inner corner point
+                if (
+                    self.dragging_mode
+                    and annotation == self.dragged_annotation
+                    and i == self.dragged_point_index
+                ):
+                    # Currently being dragged - red highlight
+                    painter.setBrush(QBrush(QColor(255, 100, 100)))
+                    painter.setPen(QPen(QColor(200, 0, 0), 2))
+                else:
+                    # Normal draggable corner
+                    painter.setBrush(QBrush(QColor(255, 255, 255)))
+                    painter.setPen(QPen(QColor(0, 0, 0), 2))
+            else:
+                # Non-draggable corner (incomplete polygon)
+                painter.setBrush(QBrush(QColor(255, 255, 255)))
+                painter.setPen(QPen(QColor(0, 0, 0), 2))
+
             painter.drawEllipse(point, 4, 4)
 
         # Draw label
@@ -688,7 +783,8 @@ class ImageAnnotationWidget(QWidget):
 
         # Instructions label
         instructions = QLabel(
-            "Click 4 points to create polygon. Right-click to set label. Delete key to remove selected."
+            "Click 4 points to create polygon. Right-click to set label/undo. "
+            "Drag corners to adjust."
         )
         instructions.setStyleSheet("color: #666; font-size: 11px;")
         toolbar.addWidget(instructions)
