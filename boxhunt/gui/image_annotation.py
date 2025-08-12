@@ -231,8 +231,15 @@ class ImageCanvas(QLabel):
     ) -> tuple[AnnotationPolygon, int]:
         """Find if there's a corner point at the given position
         Returns (annotation, point_index) or (None, -1) if no corner found
+
+        Smart selection logic:
+        1. If a polygon is selected, prioritize its points
+        2. Otherwise, select the closest point within range
         """
         corner_radius = 8  # Pixels within which a corner can be grabbed
+
+        # First, collect all candidate points within range
+        candidates = []  # (distance, annotation, point_index)
 
         for annotation in self.annotations:
             if not annotation.is_complete:
@@ -249,9 +256,27 @@ class ImageCanvas(QLabel):
                 distance = (dx * dx + dy * dy) ** 0.5
 
                 if distance <= corner_radius:
-                    return annotation, i
+                    candidates.append((distance, annotation, i))
 
-        return None, -1
+        if not candidates:
+            return None, -1
+
+        # If we have a selected annotation, prioritize its points
+        if self.selected_annotation:
+            selected_candidates = [
+                (dist, ann, idx)
+                for dist, ann, idx in candidates
+                if ann == self.selected_annotation
+            ]
+            if selected_candidates:
+                # Return closest point from selected annotation
+                selected_candidates.sort(key=lambda x: x[0])
+                return selected_candidates[0][1], selected_candidates[0][2]
+
+        # No selected annotation or no points from selected annotation in range
+        # Return closest point overall
+        candidates.sort(key=lambda x: x[0])
+        return candidates[0][1], candidates[0][2]
 
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events"""
@@ -262,39 +287,67 @@ class ImageCanvas(QLabel):
         image_pos = self.widget_to_image_coords(widget_pos)
 
         if event.button() == Qt.LeftButton:
-            # First check if we're clicking on a corner for dragging
-            corner_annotation, corner_index = self.find_corner_at_position(widget_pos)
+            # Check for shift key to enable dragging mode
+            shift_pressed = event.modifiers() & Qt.ShiftModifier
 
-            if corner_annotation is not None and not self.drawing_mode:
-                # Start dragging a corner
-                self.dragging_mode = True
-                self.dragged_annotation = corner_annotation
-                self.dragged_point_index = corner_index
-                self.drag_start_pos = widget_pos
-                self.selected_annotation = corner_annotation
-                self.status_message.emit(
-                    f"Dragging corner {corner_index + 1} of {corner_annotation.label or 'annotation'}"
+            if shift_pressed and not self.drawing_mode:
+                # Shift+click: check for corner dragging
+                corner_annotation, corner_index = self.find_corner_at_position(
+                    widget_pos
                 )
-                return
-            # Check if clicking on existing annotation for selection
-            clicked_annotation = None
-            for annotation in self.annotations:
-                if annotation.contains_point(image_pos.x(), image_pos.y()):
-                    clicked_annotation = annotation
-                    break
 
-            if clicked_annotation:
-                # Select annotation
-                self.selected_annotation = clicked_annotation
-                self.status_message.emit(f"Selected: {clicked_annotation.label}")
-            else:
-                # Add point to current polygon or start new one
-                if not self.drawing_mode:
+                if corner_annotation is not None:
+                    # Start dragging a corner
+                    self.dragging_mode = True
+                    self.dragged_annotation = corner_annotation
+                    self.dragged_point_index = corner_index
+                    self.drag_start_pos = widget_pos
+                    self.selected_annotation = corner_annotation
+                    self.status_message.emit(
+                        f"Dragging corner {corner_index + 1} of {corner_annotation.label or 'annotation'}"
+                    )
+                    return
+                else:
+                    # Shift+click but no corner found: select annotation if clicked inside one
+                    clicked_annotation = None
+                    for annotation in self.annotations:
+                        if annotation.contains_point(image_pos.x(), image_pos.y()):
+                            clicked_annotation = annotation
+                            break
+
+                    if clicked_annotation:
+                        self.selected_annotation = clicked_annotation
+                        self.status_message.emit(
+                            f"Selected: {clicked_annotation.label}"
+                        )
+                    return
+
+            # Normal click (no shift): polygon drawing/selection logic
+            if not self.drawing_mode:
+                # Check if clicking inside existing annotation for selection
+                clicked_annotation = None
+                for annotation in self.annotations:
+                    if annotation.contains_point(image_pos.x(), image_pos.y()):
+                        clicked_annotation = annotation
+                        break
+
+                if clicked_annotation:
+                    # Select annotation
+                    self.selected_annotation = clicked_annotation
+                    self.status_message.emit(f"Selected: {clicked_annotation.label}")
+                else:
                     # Start new polygon
                     self.current_annotation = AnnotationPolygon()
                     self.drawing_mode = True
                     self.selected_annotation = None
 
+                    # Add first point
+                    self.current_annotation.add_point(image_pos.x(), image_pos.y())
+                    self.status_message.emit(
+                        f"Point {len(self.current_annotation.points)}/4 added"
+                    )
+            else:
+                # Continue drawing current polygon
                 if self.current_annotation and len(self.current_annotation.points) < 4:
                     self.current_annotation.add_point(image_pos.x(), image_pos.y())
                     self.status_message.emit(
@@ -786,7 +839,7 @@ class ImageAnnotationWidget(QWidget):
         # Instructions label
         instructions = QLabel(
             "Click 4 points to create polygon. Right-click to set label/undo. "
-            "Drag corners to adjust."
+            "Shift+click to drag corners."
         )
         instructions.setStyleSheet("color: #666; font-size: 11px;")
         toolbar.addWidget(instructions)
