@@ -8,9 +8,7 @@ from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
@@ -78,7 +76,7 @@ class CropItem(QFrame):
             self.image_label.setText("No Image")
             self.image_label.setStyleSheet("border: 1px solid #ccc; color: #999;")
 
-        layout.addWidget(self.image_label)
+        layout.addWidget(self.image_label, 0, Qt.AlignCenter)
 
         # Set size policies to allow expansion
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -273,6 +271,8 @@ class CropPreviewWidget(QWidget):
 
             if not annotations or not self.current_image:
                 self.show_info_message("No annotations to preview")
+                # Emit empty crops to clear 3D viewer textures
+                self.crops_updated.emit([])
                 return
 
             # Create crop items
@@ -356,10 +356,14 @@ class CropPreviewWidget(QWidget):
                 )
             else:
                 self.show_info_message("No valid crops to display")
+                # Emit empty crops to clear 3D viewer textures
+                self.crops_updated.emit([])
 
         except Exception as e:
             self.status_message.emit(f"Error updating crops: {str(e)}")
             self.show_info_message("Error generating crop previews")
+            # Emit empty crops to clear 3D viewer textures on error
+            self.crops_updated.emit([])
 
     def clear_crops(self):
         """Clear all crop items"""
@@ -391,80 +395,6 @@ class CropPreviewWidget(QWidget):
         except Exception as e:
             self.status_message.emit(f"Error loading image for crops: {str(e)}")
             self.current_image = None
-
-
-class CropPreviewWithControls(QWidget):
-    """Crop preview widget with additional controls"""
-
-    crops_updated = Signal(list)
-    status_message = Signal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setup_ui()
-
-    def setup_ui(self):
-        """Setup user interface"""
-        layout = QVBoxLayout(self)
-
-        # Main crop preview
-        self.crop_preview = CropPreviewWidget()
-        self.crop_preview.crops_updated.connect(self.crops_updated.emit)
-        self.crop_preview.status_message.connect(self.status_message.emit)
-
-        layout.addWidget(self.crop_preview)
-
-        # Control buttons
-        controls_layout = QHBoxLayout()
-        controls_layout.setContentsMargins(5, 5, 5, 5)
-
-        # Export crops button
-        export_btn = QPushButton("Export Crops")
-        export_btn.setToolTip("Export individual crop images")
-        export_btn.clicked.connect(self.export_crops)
-        controls_layout.addWidget(export_btn)
-
-        controls_layout.addStretch()
-
-        # Generate 3D button
-        generate_btn = QPushButton("Generate 3D")
-        generate_btn.setToolTip("Generate 3D model from crops")
-        generate_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #007acc;
-                color: white;
-                font-weight: bold;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #005a9f;
-            }
-        """)
-        generate_btn.clicked.connect(self.generate_3d_model)
-        controls_layout.addWidget(generate_btn)
-
-        layout.addLayout(controls_layout)
-
-    def update_crops(self, annotations: list[dict]):
-        """Update crop previews"""
-        self.crop_preview.update_crops(annotations)
-
-    def set_image(self, image_path: str):
-        """Set source image"""
-        self.crop_preview.set_image(image_path)
-
-    def export_crops(self):
-        """Export individual crop images"""
-        # TODO: Implement crop export functionality
-        self.status_message.emit("Crop export not yet implemented")
-
-    def generate_3d_model(self):
-        """Trigger 3D model generation"""
-        # This will be handled by the main window
-        self.status_message.emit("3D model generation triggered")
 
 
 # For compatibility, use the simple version as the main export

@@ -411,6 +411,14 @@ class ImageCanvas(QLabel):
         self, annotation: AnnotationPolygon, label: str, color_index: int
     ):
         """Set predefined label for annotation"""
+        # Check if this label already exists on another annotation
+        for existing_annotation in self.annotations:
+            if existing_annotation != annotation and existing_annotation.label == label:
+                self.status_message.emit(
+                    f"Error: Label '{label}' already exists. Each face can only be annotated once."
+                )
+                return
+
         annotation.label = label
         annotation.color = self.label_colors[color_index % len(self.label_colors)]
         self.update()
