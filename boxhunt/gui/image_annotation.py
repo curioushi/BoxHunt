@@ -115,6 +115,14 @@ class ImageCanvas(QLabel):
         self.scale_factor = 1.0
         self.image_offset = QPoint(0, 0)
 
+        # Magnifier settings
+        self.magnifier_size = 120  # Size of the magnifier square
+        self.magnifier_zoom = 4.0  # Magnification factor
+        self.magnifier_visible = False
+        self.magnifier_position = QPoint(20, 20)  # Default top-left position
+        self.magnifier_at_bottom_right = False  # Position flag
+        self.mouse_pos = QPoint(0, 0)  # Current mouse position
+
         self.setMinimumSize(400, 300)
         self.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
         self.setAlignment(Qt.AlignCenter)
@@ -166,10 +174,12 @@ class ImageCanvas(QLabel):
         widget_size = self.size()
         image_size = self.original_pixmap.size()
 
-        # Calculate scale factor
+        # Calculate scale factor - allow scaling up to fit widget
         scale_x = widget_size.width() / image_size.width()
         scale_y = widget_size.height() / image_size.height()
-        self.scale_factor = min(scale_x, scale_y, 1.0)  # Don't scale up
+        self.scale_factor = min(
+            scale_x, scale_y
+        )  # Scale to fit while maintaining aspect ratio
 
         # Scale the pixmap
         new_size = QSize(
@@ -341,6 +351,11 @@ class ImageCanvas(QLabel):
         widget_pos = event.position().toPoint()
         image_pos = self.widget_to_image_coords(widget_pos)
 
+        # Update mouse position and magnifier state
+        self.mouse_pos = widget_pos
+        self.update_magnifier_position(widget_pos)
+        self.magnifier_visible = True
+
         # Update status with mouse position and drawing progress
         if self.drawing_mode and self.current_annotation:
             progress = f"Drawing: {len(self.current_annotation.points)}/4 points"
@@ -348,11 +363,68 @@ class ImageCanvas(QLabel):
             progress = f"Mouse: ({image_pos.x()}, {image_pos.y()})"
         self.status_message.emit(progress)
 
+        # Trigger repaint for magnifier
+        self.update()
+
+    def update_magnifier_position(self, mouse_pos: QPoint):
+        """Update magnifier position to avoid collision with mouse cursor"""
+        margin = 40  # Minimum distance from cursor to magnifier
+        widget_size = self.size()
+
+        # Default position: top-left
+        top_left_pos = QPoint(20, 20)
+        bottom_right_pos = QPoint(
+            widget_size.width() - self.magnifier_size - 20,
+            widget_size.height() - self.magnifier_size - 20,
+        )
+
+        # Check distance from mouse to current magnifier position
+        if not self.magnifier_at_bottom_right:
+            # Currently at top-left, check if mouse is too close
+            current_center = QPoint(
+                top_left_pos.x() + self.magnifier_size // 2,
+                top_left_pos.y() + self.magnifier_size // 2,
+            )
+            distance = (
+                (mouse_pos.x() - current_center.x()) ** 2
+                + (mouse_pos.y() - current_center.y()) ** 2
+            ) ** 0.5
+
+            if distance < self.magnifier_size // 2 + margin:
+                # Switch to bottom-right
+                self.magnifier_at_bottom_right = True
+                self.magnifier_position = bottom_right_pos
+            else:
+                self.magnifier_position = top_left_pos
+        else:
+            # Currently at bottom-right, check if mouse is too close
+            current_center = QPoint(
+                bottom_right_pos.x() + self.magnifier_size // 2,
+                bottom_right_pos.y() + self.magnifier_size // 2,
+            )
+            distance = (
+                (mouse_pos.x() - current_center.x()) ** 2
+                + (mouse_pos.y() - current_center.y()) ** 2
+            ) ** 0.5
+
+            if distance < self.magnifier_size // 2 + margin:
+                # Switch to top-left
+                self.magnifier_at_bottom_right = False
+                self.magnifier_position = top_left_pos
+            else:
+                self.magnifier_position = bottom_right_pos
+
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events"""
         # For polygon mode, we don't need special release handling
         # Points are added on press events
         pass
+
+    def leaveEvent(self, event):
+        """Handle mouse leave events"""
+        self.magnifier_visible = False
+        self.update()
+        super().leaveEvent(event)
 
     def keyPressEvent(self, event):
         """Handle key press events"""
@@ -392,6 +464,10 @@ class ImageCanvas(QLabel):
         # Draw current drawing annotation
         if self.drawing_mode and self.current_annotation:
             self.draw_current_polygon(painter)
+
+        # Draw magnifier
+        if self.magnifier_visible:
+            self.draw_magnifier(painter)
 
     def draw_polygon_annotation(
         self, painter: QPainter, annotation: AnnotationPolygon, is_selected: bool
@@ -466,6 +542,89 @@ class ImageCanvas(QLabel):
                 painter.drawLine(widget_points[-1], cursor_pos)
             except Exception:
                 pass  # Ignore cursor position errors
+
+    def draw_magnifier(self, painter: QPainter):
+        """Draw magnifier showing zoomed view around mouse cursor"""
+        if not self.magnifier_visible or self.original_pixmap.isNull():
+            return
+
+        # Calculate source rectangle on original image
+        mouse_image_pos = self.widget_to_image_coords(self.mouse_pos)
+
+        # Size of the region to capture from original image
+        capture_size = int(
+            self.magnifier_size / self.magnifier_zoom / self.scale_factor
+        )
+        half_capture = capture_size // 2
+
+        # Source rectangle on original image
+        src_rect = QRect(
+            mouse_image_pos.x() - half_capture,
+            mouse_image_pos.y() - half_capture,
+            capture_size,
+            capture_size,
+        )
+
+        # Clamp to image bounds
+        image_rect = QRect(
+            0, 0, self.original_pixmap.width(), self.original_pixmap.height()
+        )
+        src_rect = src_rect.intersected(image_rect)
+
+        if src_rect.isEmpty():
+            return
+
+        # Extract the region from original pixmap
+        cropped_pixmap = self.original_pixmap.copy(src_rect)
+
+        # Scale up the cropped region
+        magnified_pixmap = cropped_pixmap.scaled(
+            self.magnifier_size,
+            self.magnifier_size,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+
+        # Draw magnifier background
+        magnifier_rect = QRect(
+            self.magnifier_position.x(),
+            self.magnifier_position.y(),
+            self.magnifier_size,
+            self.magnifier_size,
+        )
+
+        # Semi-transparent background
+        painter.setBrush(QBrush(QColor(0, 0, 0, 100)))
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.drawRect(magnifier_rect)
+
+        # Draw the magnified image
+        center_offset = (self.magnifier_size - magnified_pixmap.width()) // 2
+        magnified_rect = QRect(
+            self.magnifier_position.x() + center_offset,
+            self.magnifier_position.y() + center_offset,
+            magnified_pixmap.width(),
+            magnified_pixmap.height(),
+        )
+        painter.drawPixmap(magnified_rect, magnified_pixmap)
+
+        # Draw crosshair at center
+        center_x = self.magnifier_position.x() + self.magnifier_size // 2
+        center_y = self.magnifier_position.y() + self.magnifier_size // 2
+        crosshair_size = 8
+
+        painter.setPen(QPen(QColor(255, 0, 0), 1))
+        painter.drawLine(
+            center_x - crosshair_size, center_y, center_x + crosshair_size, center_y
+        )
+        painter.drawLine(
+            center_x, center_y - crosshair_size, center_x, center_y + crosshair_size
+        )
+
+        # Draw border
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.setBrush(QBrush(Qt.transparent))
+        painter.drawRect(magnifier_rect)
 
     def resizeEvent(self, event):
         """Handle widget resize"""

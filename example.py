@@ -4,14 +4,14 @@ BoxHunt使用示例
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from boxhunt.crawler import BoxHuntCrawler
 from boxhunt.config import Config
+from boxhunt.crawler import BoxHuntCrawler
 
 
 async def basic_example():
@@ -49,7 +49,7 @@ async def basic_example():
         "cardboard box", max_images_per_source=5
     )
 
-    print(f"📊 爬取结果:")
+    print("📊 爬取结果:")
     print(f"   找到图片: {result['found_images']}")
     print(f"   处理成功: {result['processed_images']}")
     print(f"   保存图片: {result['saved_images']}")
@@ -73,13 +73,13 @@ async def advanced_example():
         delay_between_keywords=0.5,  # 关键词间隔0.5秒
     )
 
-    print(f"\n📈 批量爬取结果:")
+    print("\n📈 批量爬取结果:")
     print(f"   处理关键词: {results['completed_keywords']}/{results['total_keywords']}")
     print(f"   找到图片总数: {results['total_found_images']}")
     print(f"   保存图片总数: {results['total_saved_images']}")
 
     # 显示每个关键词的详细结果
-    print(f"\n📝 详细结果:")
+    print("\n📝 详细结果:")
     for keyword_result in results["keyword_results"]:
         print(
             f"   '{keyword_result['keyword']}': {keyword_result['saved_images']} 张保存"
@@ -89,13 +89,13 @@ async def advanced_example():
     stats = crawler.get_statistics()
     storage_stats = stats["storage"]
 
-    print(f"\n📊 收集统计:")
+    print("\n📊 收集统计:")
     print(f"   总图片数: {storage_stats['total_images']}")
     print(f"   总大小: {storage_stats['total_size'] / (1024 * 1024):.2f} MB")
     print(f"   平均尺寸: {storage_stats['avg_width']}×{storage_stats['avg_height']}")
 
     if storage_stats["sources"]:
-        print(f"   各源统计:")
+        print("   各源统计:")
         for source, count in storage_stats["sources"].items():
             print(f"     {source}: {count} 张")
 
@@ -113,7 +113,7 @@ async def resume_example():
         keywords=["shipping box", "包装箱"], max_images_per_source=15
     )
 
-    print(f"恢复爬取完成:")
+    print("恢复爬取完成:")
     print(f"  新保存图片: {result['total_saved_images']}")
 
 
