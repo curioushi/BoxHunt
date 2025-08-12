@@ -8,7 +8,6 @@ from PySide6.QtCore import (
     QDir,
     QEvent,
     QFileInfo,
-    QStandardPaths,
     Qt,
     Signal,
 )
@@ -222,11 +221,12 @@ class FileBrowserWidget(QWidget):
 
     def setup_initial_directory(self):
         """Setup initial directory"""
-        # Try to start in user's pictures directory
-        pictures_path = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
-        if Path(pictures_path).exists():
-            self.navigate_to_directory(pictures_path)
+        # Start in current working directory
+        current_path = QDir.currentPath()
+        if Path(current_path).exists():
+            self.navigate_to_directory(current_path)
         else:
+            # Fallback to home directory if current path doesn't exist
             self.navigate_to_directory(QDir.homePath())
 
     def navigate_to_directory(self, directory_path: str):

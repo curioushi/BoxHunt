@@ -398,6 +398,11 @@ class ImageCanvas(QLabel):
         widget_pos = event.position().toPoint()
         image_pos = self.widget_to_image_coords(widget_pos)
 
+        # Always update mouse position and magnifier state
+        self.mouse_pos = widget_pos
+        self.update_magnifier_position(widget_pos)
+        self.magnifier_visible = True
+
         # Handle corner dragging
         if (
             self.dragging_mode
@@ -416,11 +421,6 @@ class ImageCanvas(QLabel):
                 f"({old_point[0]}, {old_point[1]}) → ({new_point[0]}, {new_point[1]})"
             )
         else:
-            # Update mouse position and magnifier state
-            self.mouse_pos = widget_pos
-            self.update_magnifier_position(widget_pos)
-            self.magnifier_visible = True
-
             # Update status with mouse position and drawing progress
             if self.drawing_mode and self.current_annotation:
                 progress = f"Drawing: {len(self.current_annotation.points)}/4 points"
