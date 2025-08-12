@@ -3,7 +3,7 @@ Crop preview widget for showing annotated regions
 """
 
 from PIL import Image
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -12,21 +12,23 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from .utils import apply_perspective_transform, pil_to_qpixmap, scale_image_to_fit
+from .utils import apply_perspective_transform, pil_to_qpixmap
 
 
 class CropItem(QFrame):
-    """Individual crop item widget"""
+    """Individual crop item widget with adaptive sizing"""
 
     def __init__(self, crop_data: dict, crop_image: QPixmap, parent=None):
         super().__init__(parent)
 
         self.crop_data = crop_data
         self.crop_image = crop_image
+        self.image_label = None
 
         self.setup_ui()
 
@@ -38,7 +40,8 @@ class CropItem(QFrame):
                 border: 2px solid #ddd;
                 border-radius: 8px;
                 background-color: white;
-                margin: 5px;
+                margin: 0px;
+                padding: 0px;
             }
             CropItem:hover {
                 border-color: #007acc;
@@ -46,38 +49,78 @@ class CropItem(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(4, 4, 4, 4)  # Minimal margins for border clearance
+        layout.setSpacing(4)  # Only spacing between label and image
 
         # Label
         label = QLabel(self.crop_data.get("label", "Crop"))
-        label.setFont(QFont("Arial", 12, QFont.Bold))
+        label.setFont(QFont("Arial", 10, QFont.Bold))
         label.setAlignment(Qt.AlignCenter)
         label.setStyleSheet("color: #333; border: none;")
         layout.addWidget(label)
 
         # Image
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignCenter)
-        image_label.setMinimumSize(120, 120)
-        image_label.setMaximumSize(150, 150)
-        image_label.setStyleSheet("border: 1px solid #ccc; background-color: #f9f9f9;")
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setStyleSheet(
+            "border: 1px solid #ccc; background-color: #f9f9f9;"
+        )
+        self.image_label.setScaledContents(False)  # We'll handle scaling manually
 
         if not self.crop_image.isNull():
-            # Scale image to fit label
-            scaled_image = scale_image_to_fit(self.crop_image, 140, 140)
-            image_label.setPixmap(scaled_image)
+            # Initially set a placeholder - will be updated by set_size
+            self.image_label.setPixmap(
+                self.crop_image.scaled(
+                    100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+            )
         else:
-            image_label.setText("No Image")
-            image_label.setStyleSheet("border: 1px solid #ccc; color: #999;")
+            self.image_label.setText("No Image")
+            self.image_label.setStyleSheet("border: 1px solid #ccc; color: #999;")
 
-        layout.addWidget(image_label)
+        layout.addWidget(self.image_label)
 
-        self.setFixedSize(180, 180)
+        # Set size policies to allow expansion
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+    def set_size(self, width: int, height: int):
+        """Set the crop item to a specific size"""
+        # Calculate available space for image (minimal margins, only label spacing)
+        label_height = 20  # Approximate height for label (reduced font size)
+        vertical_margins = 8  # Top + bottom margins (4+4)
+        horizontal_margins = 8  # Left + right margins (4+4)
+        spacing = 4  # Spacing between label and image
+        border_width = 4  # Border width (2px each side)
+
+        available_height = (
+            height - label_height - vertical_margins - spacing - border_width
+        )
+        available_width = width - horizontal_margins - border_width
+
+        max_size = min(available_width, available_height)
+        max_size = max(max_size, 60)  # Minimum image size
+
+        if not self.crop_image.isNull():
+            # Scale image to fit the available space while maintaining aspect ratio
+            scaled_image = self.crop_image.scaled(
+                max_size, max_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+
+            # Set the image_label size to match the actual scaled image size
+            # This eliminates the white space around the image
+            self.image_label.setFixedSize(scaled_image.size())
+            self.image_label.setPixmap(scaled_image)
+        else:
+            # For "No Image" case, use a square area
+            self.image_label.setFixedSize(max_size, max_size)
+
+        # Set the widget size
+        self.setFixedSize(width, height)
 
 
 class CropPreviewWidget(QWidget):
-    """Widget for previewing cropped regions"""
+    """Widget for previewing cropped regions with adaptive sizing"""
 
     crops_updated = Signal(list)  # List of crop data
     status_message = Signal(str)
@@ -89,6 +132,102 @@ class CropPreviewWidget(QWidget):
         self.crop_items = []
 
         self.setup_ui()
+
+    def calculate_optimal_layout(self, num_crops: int) -> tuple[int, int]:
+        """Calculate optimal grid layout (rows, cols) with maximum 2 columns"""
+        if num_crops <= 0:
+            return 1, 1
+        elif num_crops == 1:
+            return 1, 1
+        elif num_crops == 2:
+            return 1, 2
+        elif num_crops <= 4:
+            return 2, 2
+        else:
+            # For 5 or more crops, use 2 columns with multiple rows
+            rows = (num_crops + 1) // 2  # Round up division
+            return rows, 2
+
+    def calculate_crop_size(self, num_crops: int) -> tuple[int, int]:
+        """Calculate optimal size for each crop item based on available space"""
+        if not self.crops_container or num_crops <= 0:
+            return 180, 180
+
+        # Get available space
+        container_size = self.crops_container.size()
+        available_width = (
+            container_size.width() - 16
+        )  # Account for reduced margins (8+8)
+        available_height = (
+            container_size.height() - 16
+        )  # Account for reduced margins (8+8)
+
+        # Get layout dimensions
+        rows, cols = self.calculate_optimal_layout(num_crops)
+
+        # Account for spacing between items (minimal spacing)
+        spacing = 4  # Match reduced spacing
+        total_spacing_h = spacing * (cols - 1)
+        total_spacing_v = spacing * (rows - 1)
+
+        # Calculate item size
+        item_width = max((available_width - total_spacing_h) // cols, 120)
+        item_height = max((available_height - total_spacing_v) // rows, 120)
+
+        # Keep items roughly square, but allow some variation
+        size = min(item_width, item_height)
+        size = max(size, 120)  # Minimum size
+        size = min(size, 300)  # Maximum size
+
+        return size, size
+
+    def layout_crops_adaptive(self, num_crops: int):
+        """Layout crop items using adaptive sizing"""
+        if num_crops == 0:
+            return
+
+        # Get optimal layout
+        rows, cols = self.calculate_optimal_layout(num_crops)
+
+        # Calculate item size based on current container size
+        item_width, item_height = self.calculate_crop_size(num_crops)
+
+        # Apply layout and sizes
+        for i, crop_item in enumerate(self.crop_items):
+            row = i // cols
+            col = i % cols
+
+            # Set the size for the crop item
+            crop_item.set_size(item_width, item_height)
+
+            # Add to grid layout
+            self.crops_layout.addWidget(crop_item, row, col)
+
+    def resizeEvent(self, event):
+        """Handle widget resize to update crop sizes"""
+        super().resizeEvent(event)
+
+        # Only re-layout if we have crops and the size has changed significantly
+        if self.crop_items and event.size() != event.oldSize():
+            # Delay the re-layout to avoid too frequent updates
+            self.updateGeometry()
+            if hasattr(self, "_resize_timer"):
+                self._resize_timer.stop()
+            else:
+                self._resize_timer = QTimer()
+                self._resize_timer.setSingleShot(True)
+                self._resize_timer.timeout.connect(self._delayed_resize)
+            self._resize_timer.start(100)  # 100ms delay
+
+    def _delayed_resize(self):
+        """Delayed resize handling to avoid too frequent updates"""
+        if self.crop_items:
+            num_crops = len(self.crop_items)
+            item_width, item_height = self.calculate_crop_size(num_crops)
+
+            # Update each crop item size
+            for crop_item in self.crop_items:
+                crop_item.set_size(item_width, item_height)
 
     def setup_ui(self):
         """Setup user interface"""
@@ -117,8 +256,8 @@ class CropPreviewWidget(QWidget):
         # Container widget for crops
         self.crops_container = QWidget()
         self.crops_layout = QGridLayout(self.crops_container)
-        self.crops_layout.setContentsMargins(10, 10, 10, 10)
-        self.crops_layout.setSpacing(10)
+        self.crops_layout.setContentsMargins(8, 8, 8, 8)  # Reduced margins
+        self.crops_layout.setSpacing(4)  # Minimal spacing between crop items
 
         self.scroll_area.setWidget(self.crops_container)
         layout.addWidget(self.scroll_area)
@@ -187,14 +326,8 @@ class CropPreviewWidget(QWidget):
                     # Convert to QPixmap
                     crop_pixmap = pil_to_qpixmap(crop_region)
 
-                    # Create crop item
+                    # Create crop item without fixed size
                     crop_item = CropItem(display_annotation, crop_pixmap, self)
-
-                    # Add to layout (2 columns)
-                    row = i // 2
-                    col = i % 2
-                    self.crops_layout.addWidget(crop_item, row, col)
-
                     self.crop_items.append(crop_item)
 
                     # Store crop data for 3D generation
@@ -213,6 +346,9 @@ class CropPreviewWidget(QWidget):
                     continue
 
             if crops_data:
+                # Use adaptive layout
+                self.layout_crops_adaptive(len(crops_data))
+
                 self.show_crops()
                 self.crops_updated.emit(crops_data)
                 self.status_message.emit(

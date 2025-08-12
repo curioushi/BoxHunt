@@ -73,13 +73,13 @@ class BoxMakerMainWindow(QMainWindow):
 
         # Create widgets
         self.image_annotation = ImageAnnotationWidget()
-        self.image_annotation.setMinimumSize(200, 300)
+        self.image_annotation.setMinimumSize(200, 200)
 
         self.crop_preview = CropPreviewWidget()
-        self.crop_preview.setMinimumSize(100, 300)
+        self.crop_preview.setMinimumSize(200, 150)
 
         self.box3d_viewer = Box3DViewerWidget()
-        self.box3d_viewer.setMinimumSize(200, 300)
+        self.box3d_viewer.setMinimumSize(200, 150)
 
         top_splitter.addWidget(self.image_annotation)
         top_splitter.addWidget(self.crop_preview)
@@ -87,11 +87,11 @@ class BoxMakerMainWindow(QMainWindow):
 
         # Set strict stretch factors for 2:1:2 ratio
         top_splitter.setStretchFactor(0, 4)  # Image annotation: 4 parts
-        top_splitter.setStretchFactor(1, 2)  # Crop preview: 2 parts
-        top_splitter.setStretchFactor(2, 4)  # 3D viewer: 4 parts
+        top_splitter.setStretchFactor(1, 3)  # Crop preview: 2 parts
+        top_splitter.setStretchFactor(2, 3)  # 3D viewer: 4 parts
 
         # Set initial sizes to enforce ratio
-        top_splitter.setSizes([800, 400, 800])
+        top_splitter.setSizes([800, 600, 600])
 
         top_layout.addWidget(top_splitter)
 
