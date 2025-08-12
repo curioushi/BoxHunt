@@ -197,6 +197,7 @@ class BoxMakerMainWindow(QMainWindow):
         try:
             self.current_image_path = image_path
             self.image_annotation.load_image(image_path)
+            self.crop_preview.set_image(image_path)  # Set image for crop preview
             self.status_bar.showMessage(f"Loaded: {Path(image_path).name}")
             logger.info(f"Image loaded: {image_path}")
             self.image_loaded.emit(image_path)

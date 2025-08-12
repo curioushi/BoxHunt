@@ -18,7 +18,6 @@ from PySide6.QtGui import (
     QPolygon,
 )
 from PySide6.QtWidgets import (
-    QInputDialog,
     QLabel,
     QMenu,
     QPushButton,
@@ -249,15 +248,30 @@ class ImageCanvas(QLabel):
                         self.finish_polygon()
 
         elif event.button() == Qt.RightButton:
-            # Show context menu for completed annotations
-            clicked_annotation = None
-            for annotation in self.annotations:
-                if annotation.contains_point(image_pos.x(), image_pos.y()):
-                    clicked_annotation = annotation
-                    break
+            # If in drawing mode, remove last point
+            if (
+                self.drawing_mode
+                and self.current_annotation
+                and len(self.current_annotation.points) > 0
+            ):
+                self.current_annotation.points.pop()
+                self.status_message.emit(
+                    f"Point removed. {len(self.current_annotation.points)}/4 points"
+                )
+                if len(self.current_annotation.points) == 0:
+                    self.drawing_mode = False
+                    self.current_annotation = None
+                    self.status_message.emit("Drawing cancelled")
+            else:
+                # Show context menu for completed annotations
+                clicked_annotation = None
+                for annotation in self.annotations:
+                    if annotation.contains_point(image_pos.x(), image_pos.y()):
+                        clicked_annotation = annotation
+                        break
 
-            if clicked_annotation:
-                self.show_context_menu(widget_pos, clicked_annotation)
+                if clicked_annotation:
+                    self.show_context_menu(widget_pos, clicked_annotation)
 
         self.update()
 
@@ -274,10 +288,6 @@ class ImageCanvas(QLabel):
                     annotation, lbl, idx
                 )
             )
-
-        # Custom label
-        custom_action = label_menu.addAction("Custom...")
-        custom_action.triggered.connect(lambda: self.set_custom_label(annotation))
 
         menu.addSeparator()
 
@@ -297,15 +307,6 @@ class ImageCanvas(QLabel):
         self.annotations_changed.emit(self.annotations)
         self.status_message.emit(f"Label set to: {label}")
 
-    def set_custom_label(self, annotation: AnnotationPolygon):
-        """Set custom label for annotation"""
-        text, ok = QInputDialog.getText(self, "Custom Label", "Enter label:")
-        if ok and text.strip():
-            annotation.label = text.strip()
-            self.update()
-            self.annotations_changed.emit(self.annotations)
-            self.status_message.emit(f"Label set to: {text.strip()}")
-
     def delete_annotation(self, annotation: AnnotationPolygon):
         """Delete annotation"""
         if annotation in self.annotations:
@@ -313,7 +314,7 @@ class ImageCanvas(QLabel):
             if self.selected_annotation == annotation:
                 self.selected_annotation = None
             self.update()
-            self.annotations_changed.emit(self.annotations)
+            self.annotations_changed.emit(self.get_annotations())
             self.status_message.emit("Annotation deleted")
 
     def finish_polygon(self):
@@ -329,7 +330,7 @@ class ImageCanvas(QLabel):
             self.current_annotation = None
             self.drawing_mode = False
 
-            self.annotations_changed.emit(self.annotations)
+            self.annotations_changed.emit(self.get_annotations())
             self.status_message.emit("Polygon completed. Right-click to set label.")
 
     def mouseMoveEvent(self, event: QMouseEvent):
