@@ -104,13 +104,13 @@ class BoxMakerMainWindow(QMainWindow):
         bottom_splitter.addWidget(self.file_browser)
         bottom_splitter.addWidget(self.log_widget)
         bottom_splitter.setStretchFactor(0, 1)
-        bottom_splitter.setStretchFactor(1, 1)
+        bottom_splitter.setStretchFactor(1, 2)
 
         # Add widgets to main splitter
         main_splitter.addWidget(top_widget)
         main_splitter.addWidget(bottom_splitter)
-        main_splitter.setStretchFactor(0, 3)  # Top takes 3/4 of space
-        main_splitter.setStretchFactor(1, 1)  # Bottom takes 1/4 of space
+        main_splitter.setStretchFactor(0, 5)  # Top takes 1/2 of space
+        main_splitter.setStretchFactor(1, 3)  # Bottom takes 1/2 of space
 
         main_layout.addWidget(main_splitter)
 

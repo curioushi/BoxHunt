@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import (
     QDir,
+    QEvent,
     QFileInfo,
     QStandardPaths,
     Qt,
@@ -16,9 +17,11 @@ from PySide6.QtWidgets import (
     QFileSystemModel,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QTreeView,
     QVBoxLayout,
@@ -44,8 +47,9 @@ class ImagePreviewWidget(QWidget):
         # Image preview label
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
+        # Set fixed size policy to prevent resizing
+        self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.image_label.setMinimumSize(150, 150)
-        self.image_label.setMaximumSize(200, 200)
         self.image_label.setStyleSheet("""
             QLabel {
                 border: 1px solid #ccc;
@@ -56,12 +60,8 @@ class ImagePreviewWidget(QWidget):
         self.image_label.setText("No Preview")
         layout.addWidget(self.image_label)
 
-        # Image info
-        self.info_label = QLabel("No image selected")
-        self.info_label.setFont(QFont("Arial", 9))
-        self.info_label.setAlignment(Qt.AlignCenter)
-        self.info_label.setStyleSheet("color: #666; border: none;")
-        layout.addWidget(self.info_label)
+        # Set size policy for the entire preview widget
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def set_image(self, image_path: str):
         """Set image for preview"""
@@ -75,30 +75,43 @@ class ImagePreviewWidget(QWidget):
             # Load and scale image
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                # Scale to fit preview
+                # Scale to fixed size to maintain layout stability
+                target_size = self.image_label.size()
+                if target_size.width() < 100 or target_size.height() < 100:
+                    # Use minimum size if label size is not yet determined
+                    target_size = self.image_label.minimumSize()
                 scaled_pixmap = pixmap.scaled(
-                    180, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                    target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
                 )
                 self.image_label.setPixmap(scaled_pixmap)
-
-                # Update info
-                file_info = QFileInfo(image_path)
-                size_mb = file_info.size() / (1024 * 1024)
-                info_text = f"{file_info.fileName()}\n{pixmap.width()}×{pixmap.height()}\n{size_mb:.1f} MB"
-                self.info_label.setText(info_text)
             else:
                 self.clear_preview()
 
-        except Exception as e:
+        except Exception:
             self.clear_preview()
-            self.info_label.setText(f"Error: {str(e)}")
 
     def clear_preview(self):
         """Clear the preview"""
         self.image_label.clear()
         self.image_label.setText("No Preview")
-        self.info_label.setText("No image selected")
         self.current_image_path = None
+
+    def get_image_info(self, image_path: str) -> str:
+        """Get image information text"""
+        try:
+            if not Path(image_path).exists():
+                return "No image selected"
+
+            pixmap = QPixmap(image_path)
+            if pixmap.isNull():
+                return "Invalid image file"
+
+            file_info = QFileInfo(image_path)
+            size_mb = file_info.size() / (1024 * 1024)
+            return f"{file_info.fileName()}\n{pixmap.width()}×{pixmap.height()}\n{size_mb:.1f} MB"
+
+        except Exception as e:
+            return f"Error: {str(e)}"
 
 
 class FileBrowserWidget(QWidget):
@@ -119,36 +132,24 @@ class FileBrowserWidget(QWidget):
         """Setup user interface"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(10)
+        layout.setSpacing(5)
 
-        # Path navigation
+        # Path input
         nav_layout = QHBoxLayout()
 
-        # Quick access buttons
-        home_btn = QPushButton("Home")
-        home_btn.setToolTip("Go to home directory")
-        home_btn.clicked.connect(self.go_to_home)
-        nav_layout.addWidget(home_btn)
+        path_label = QLabel("Path:")
+        nav_layout.addWidget(path_label)
 
-        pictures_btn = QPushButton("Pictures")
-        pictures_btn.setToolTip("Go to pictures directory")
-        pictures_btn.clicked.connect(self.go_to_pictures)
-        nav_layout.addWidget(pictures_btn)
+        self.path_input = QLineEdit()
+        self.path_input.setPlaceholderText("Enter directory path...")
+        self.path_input.returnPressed.connect(self.on_path_input_entered)
+        nav_layout.addWidget(self.path_input)
 
-        # Data directory button (BoxHunt data)
-        data_btn = QPushButton("Data")
-        data_btn.setToolTip("Go to BoxHunt data directory")
-        data_btn.clicked.connect(self.go_to_data_directory)
-        nav_layout.addWidget(data_btn)
-
-        nav_layout.addStretch()
+        goto_btn = QPushButton("Go")
+        goto_btn.clicked.connect(self.on_path_input_entered)
+        nav_layout.addWidget(goto_btn)
 
         layout.addLayout(nav_layout)
-
-        # Current path display
-        self.path_label = QLabel("Current: /")
-        self.path_label.setStyleSheet("color: #666; font-size: 10px; padding: 2px;")
-        layout.addWidget(self.path_label)
 
         # Main content splitter
         splitter = QSplitter(Qt.Horizontal)
@@ -157,21 +158,39 @@ class FileBrowserWidget(QWidget):
         self.setup_tree_view()
         splitter.addWidget(self.tree_view)
 
-        # Right side: image list and preview
+        # Right side: image list, preview and info
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(5)
+        # Ensure the right widget maintains its structure
+        right_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # Image list
+        # Image list (ratio 4)
         self.image_list = QListWidget()
-        self.image_list.setMaximumHeight(150)
+        self.image_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.image_list.itemClicked.connect(self.on_image_item_clicked)
         self.image_list.itemDoubleClicked.connect(self.on_image_double_clicked)
-        right_layout.addWidget(self.image_list)
+        self.image_list.itemSelectionChanged.connect(self.on_image_selection_changed)
+        # Install event filter for keyboard support
+        self.image_list.installEventFilter(self)
+        right_layout.addWidget(self.image_list, 4)
 
-        # Image preview
+        # Image preview (ratio 4)
         self.image_preview = ImagePreviewWidget()
-        right_layout.addWidget(self.image_preview)
+        self.image_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_layout.addWidget(self.image_preview, 4)
+
+        # Image info (ratio 1)
+        self.image_info_label = QLabel("No image selected")
+        self.image_info_label.setFont(QFont("Arial", 9))
+        self.image_info_label.setAlignment(Qt.AlignCenter)
+        self.image_info_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.image_info_label.setMaximumHeight(80)  # Limit info area height
+        self.image_info_label.setStyleSheet(
+            "color: #666; border: 1px solid #ccc; background-color: #f9f9f9; padding: 5px;"
+        )
+        right_layout.addWidget(self.image_info_label, 1)
 
         splitter.addWidget(right_widget)
 
@@ -180,11 +199,6 @@ class FileBrowserWidget(QWidget):
         splitter.setStretchFactor(1, 1)  # Image list and preview
 
         layout.addWidget(splitter)
-
-        # Status
-        self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #666; font-size: 9px; padding: 2px;")
-        layout.addWidget(self.status_label)
 
     def setup_tree_view(self):
         """Setup the directory tree view"""
@@ -227,14 +241,14 @@ class FileBrowserWidget(QWidget):
                 self.tree_view.setCurrentIndex(index)
                 self.tree_view.expand(index)
 
-                # Update path label
-                self.path_label.setText(f"Current: {self.current_directory}")
+                # Update path input
+                self.path_input.setText(self.current_directory)
 
                 # Update image list
                 self.update_image_list()
 
-        except Exception as e:
-            self.status_label.setText(f"Error navigating: {str(e)}")
+        except Exception:
+            pass  # Silently ignore errors
 
     def on_directory_selected(self, selected, deselected):
         """Handle directory selection in tree view"""
@@ -246,16 +260,19 @@ class FileBrowserWidget(QWidget):
 
                 if directory_path != self.current_directory:
                     self.current_directory = directory_path
-                    self.path_label.setText(f"Current: {self.current_directory}")
+                    self.path_input.setText(self.current_directory)
                     self.update_image_list()
 
-        except Exception as e:
-            self.status_label.setText(f"Error selecting directory: {str(e)}")
+        except Exception:
+            pass  # Silently ignore errors
 
     def update_image_list(self):
         """Update the list of images in current directory"""
         try:
             self.image_list.clear()
+            # Clear preview and info when updating image list
+            self.image_preview.clear_preview()
+            self.image_info_label.setText("No image selected")
 
             if not self.current_directory:
                 return
@@ -282,12 +299,8 @@ class FileBrowserWidget(QWidget):
                 item.setToolTip(str(image_file))
                 self.image_list.addItem(item)
 
-            # Update status
-            count = len(image_files)
-            self.status_label.setText(f"Found {count} image{'s' if count != 1 else ''}")
-
-        except Exception as e:
-            self.status_label.setText(f"Error updating image list: {str(e)}")
+        except Exception:
+            pass  # Silently ignore errors
 
     def on_image_item_clicked(self, item: QListWidgetItem):
         """Handle image item click"""
@@ -296,9 +309,12 @@ class FileBrowserWidget(QWidget):
             if image_path:
                 # Show preview
                 self.image_preview.set_image(image_path)
+                # Update image info
+                info_text = self.image_preview.get_image_info(image_path)
+                self.image_info_label.setText(info_text)
 
-        except Exception as e:
-            self.status_label.setText(f"Error previewing image: {str(e)}")
+        except Exception:
+            pass  # Silently ignore errors
 
     def on_image_double_clicked(self, item: QListWidgetItem):
         """Handle image item double click"""
@@ -307,38 +323,44 @@ class FileBrowserWidget(QWidget):
             if image_path:
                 # Emit signal to load image in main application
                 self.image_selected.emit(image_path)
-                self.status_label.setText(f"Selected: {Path(image_path).name}")
+                pass  # Selection completed silently
 
-        except Exception as e:
-            self.status_label.setText(f"Error selecting image: {str(e)}")
+        except Exception:
+            pass  # Silently ignore errors
 
-    def go_to_home(self):
-        """Navigate to home directory"""
-        home_path = QDir.homePath()
-        self.navigate_to_directory(home_path)
-
-    def go_to_pictures(self):
-        """Navigate to pictures directory"""
-        pictures_path = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
-        if Path(pictures_path).exists():
-            self.navigate_to_directory(pictures_path)
-        else:
-            self.go_to_home()
-
-    def go_to_data_directory(self):
-        """Navigate to BoxHunt data directory"""
+    def on_image_selection_changed(self):
+        """Handle image selection change (for keyboard navigation)"""
         try:
-            # Assume data directory is relative to current working directory
-            data_path = Path.cwd() / "data"
-            if data_path.exists():
-                self.navigate_to_directory(str(data_path))
-            else:
-                # Create data directory if it doesn't exist
-                data_path.mkdir(exist_ok=True)
-                self.navigate_to_directory(str(data_path))
+            current_item = self.image_list.currentItem()
+            if current_item:
+                image_path = current_item.data(Qt.UserRole)
+                if image_path:
+                    # Show preview
+                    self.image_preview.set_image(image_path)
+                    # Update image info
+                    info_text = self.image_preview.get_image_info(image_path)
+                    self.image_info_label.setText(info_text)
 
-        except Exception as e:
-            self.status_label.setText(f"Error accessing data directory: {str(e)}")
+        except Exception:
+            pass  # Silently ignore errors
+
+    def on_path_input_entered(self):
+        """Handle path input when user presses Enter or clicks Go"""
+        try:
+            input_path = self.path_input.text().strip()
+            if input_path:
+                # Expand ~ to home directory
+                if input_path.startswith("~"):
+                    input_path = str(Path(input_path).expanduser())
+
+                # Navigate to the entered path
+                if Path(input_path).exists() and Path(input_path).is_dir():
+                    self.navigate_to_directory(input_path)
+                else:
+                    pass  # Invalid path - do nothing silently
+
+        except Exception:
+            pass  # Silently ignore errors
 
     def get_current_image(self) -> str | None:
         """Get currently selected image path"""
@@ -348,3 +370,15 @@ class FileBrowserWidget(QWidget):
         """Refresh current directory"""
         if self.current_directory:
             self.update_image_list()
+
+    def eventFilter(self, source, event):
+        """Event filter to handle keyboard events"""
+        if source == self.image_list and event.type() == QEvent.KeyPress:
+            key_event = event
+            if key_event.key() == Qt.Key_Return or key_event.key() == Qt.Key_Enter:
+                # Handle Enter key - select current image
+                current_item = self.image_list.currentItem()
+                if current_item:
+                    self.on_image_double_clicked(current_item)
+                return True  # Event handled
+        return super().eventFilter(source, event)
