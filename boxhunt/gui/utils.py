@@ -110,29 +110,32 @@ def apply_perspective_transform(
     src_points: list[tuple[int, int]],
     output_size: tuple[int, int] = (512, 512),
 ) -> Image.Image:
-    """Apply perspective transformation to extract and rectify a quadrilateral region"""
+    """Apply perspective transformation to extract and rectify a quadrilateral region
+
+    Extracts the polygon region defined by src_points and transforms it to fill
+    the entire output image:
+    - src_points[0] (polygon corner) -> top-left corner (0, 0)
+    - src_points[1] (polygon corner) -> bottom-left corner (0, 512)
+    - src_points[2] (polygon corner) -> bottom-right corner (512, 512)
+    - src_points[3] (polygon corner) -> top-right corner (512, 0)
+    """
     try:
+        if len(src_points) != 4:
+            raise ValueError(f"Expected 4 source points, got {len(src_points)}")
+
         # Define destination points (corners of output rectangle)
+        # We want to map polygon region to fill the entire 512x512 output
+        width, height = output_size
         dst_points = [
-            (0, 0),  # top-left
-            (output_size[0], 0),  # top-right
-            (output_size[0], output_size[1]),  # bottom-right
-            (0, output_size[1]),  # bottom-left
+            (0, 0),  # 左上角
+            (0, height),  # 左下角
+            (width, height),  # 右下角
+            (width, 0),  # 右上角
         ]
 
-        # Calculate perspective transformation coefficients using PIL's transform
-        # PIL expects coefficients for the inverse transformation
-        src_coords = []
-        for point in src_points:
-            src_coords.extend([point[0], point[1]])
-
-        dst_coords = []
-        for point in dst_points:
-            dst_coords.extend([point[0], point[1]])
-
-        # Use PIL's built-in perspective transformation
-        # We need to calculate the coefficients for the transformation
-        coeffs = get_perspective_coefficients(src_points, dst_points)
+        # PIL transform uses inverse transformation, so we need to swap src and dst
+        # This will extract the polygon region and map it to fill the output rectangle
+        coeffs = get_perspective_coefficients(dst_points, src_points)
 
         # Apply the transformation
         transformed = image.transform(
@@ -140,13 +143,16 @@ def apply_perspective_transform(
             Image.PERSPECTIVE,
             coeffs,
             resample=Image.BICUBIC,
-            fillcolor=(255, 255, 255),  # White background for missing areas
+            fillcolor=(255, 255, 255),
         )
 
         return transformed
 
     except Exception as e:
         print(f"Perspective transform error: {e}")
+        print(f"Source points: {src_points}")
+        print(f"Output size: {output_size}")
+
         # Fallback: create a simple crop of the bounding box
         if len(src_points) >= 4:
             xs = [p[0] for p in src_points]

@@ -73,25 +73,7 @@ class CropItem(QFrame):
 
         layout.addWidget(image_label)
 
-        # Dimensions info
-        dimensions = (
-            f"{self.crop_data.get('width', 0)}×{self.crop_data.get('height', 0)}"
-        )
-        dim_label = QLabel(dimensions)
-        dim_label.setFont(QFont("Arial", 10))
-        dim_label.setAlignment(Qt.AlignCenter)
-        dim_label.setStyleSheet("color: #666; border: none;")
-        layout.addWidget(dim_label)
-
-        # Position info
-        position = f"({self.crop_data.get('x', 0)}, {self.crop_data.get('y', 0)})"
-        pos_label = QLabel(position)
-        pos_label.setFont(QFont("Arial", 9))
-        pos_label.setAlignment(Qt.AlignCenter)
-        pos_label.setStyleSheet("color: #888; border: none;")
-        layout.addWidget(pos_label)
-
-        self.setFixedSize(180, 220)
+        self.setFixedSize(180, 180)
 
 
 class CropPreviewWidget(QWidget):

@@ -361,7 +361,7 @@ class ImageCanvas(QLabel):
         annotation.label = label
         annotation.color = self.label_colors[color_index % len(self.label_colors)]
         self.update()
-        self.annotations_changed.emit(self.annotations)
+        self.annotations_changed.emit(self.get_annotations())
         self.status_message.emit(f"Label set to: {label}")
 
     def delete_annotation(self, annotation: AnnotationPolygon):
@@ -599,9 +599,11 @@ class ImageCanvas(QLabel):
         if annotation.label and len(widget_points) > 0:
             painter.setPen(QPen(QColor(0, 0, 0), 1))
             painter.setFont(QFont("Arial", 12, QFont.Bold))
-            # Position label at first point
-            label_pos = widget_points[0]
-            painter.drawText(label_pos.x() + 8, label_pos.y() - 8, annotation.label)
+            # Position label at center of polygon
+            center_x = sum(p.x() for p in widget_points) // len(widget_points)
+            center_y = sum(p.y() for p in widget_points) // len(widget_points)
+            label_pos = QPoint(center_x, center_y)
+            painter.drawText(label_pos.x() - 20, label_pos.y() - 5, annotation.label)
 
     def draw_current_polygon(self, painter: QPainter):
         """Draw currently being drawn polygon"""
