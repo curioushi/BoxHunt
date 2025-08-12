@@ -22,6 +22,7 @@ from .crop_preview import CropPreviewWidget
 from .file_browser import FileBrowserWidget
 from .image_annotation import ImageAnnotationWidget
 from .log_widget import LogWidget
+from .logger import logger
 
 
 class BoxMakerMainWindow(QMainWindow):
@@ -96,6 +97,9 @@ class BoxMakerMainWindow(QMainWindow):
         # Right: Log widget
         self.log_widget = LogWidget()
         self.log_widget.setMinimumSize(400, 200)
+        
+        # Register log widget with global logger
+        logger.add_handler(self.log_widget)
 
         bottom_splitter.addWidget(self.file_browser)
         bottom_splitter.addWidget(self.log_widget)
@@ -114,6 +118,9 @@ class BoxMakerMainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
+        
+        # Test global logger
+        logger.info("BoxHunt application initialized")
 
     def create_menu_bar(self):
         """Create menu bar"""
@@ -183,8 +190,8 @@ class BoxMakerMainWindow(QMainWindow):
             self.current_image_path = image_path
             self.image_annotation.load_image(image_path)
             self.status_bar.showMessage(f"Loaded: {Path(image_path).name}")
-            self.log_widget.add_log(f"Image loaded: {image_path}")
+            logger.info(f"Image loaded: {image_path}")
             self.image_loaded.emit(image_path)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load image: {str(e)}")
-            self.log_widget.add_log(f"Error loading image: {str(e)}", "ERROR")
+            logger.error(f"Error loading image: {str(e)}")

@@ -153,7 +153,7 @@ class LogWidget(QWidget):
         self.log_handler.setFormatter(formatter)
 
         # Initial log message
-        self.add_log("Log widget initialized", "INFO")
+        self._internal_log("Log widget initialized", "INFO")
 
     def add_log_message(self, timestamp: str, level: str, message: str):
         """Add log message from logging handler"""
@@ -161,9 +161,15 @@ class LogWidget(QWidget):
             self.append_formatted_message(timestamp, level, message)
 
     def add_log(self, message: str, level: str = "INFO"):
-        """Add log message directly"""
+        """Add log message directly (LogHandler interface)"""
         timestamp = datetime.now().strftime("%H:%M:%S")
 
+        if level in self.visible_levels:
+            self.append_formatted_message(timestamp, level, message)
+    
+    def _internal_log(self, message: str, level: str = "INFO"):
+        """Internal logging method to avoid circular dependencies"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
         if level in self.visible_levels:
             self.append_formatted_message(timestamp, level, message)
 
@@ -195,7 +201,7 @@ class LogWidget(QWidget):
     def clear_log(self):
         """Clear all log messages"""
         self.log_text.clear()
-        self.add_log("Log cleared", "INFO")
+        self._internal_log("Log cleared", "INFO")
 
     def set_auto_scroll(self, enabled: bool):
         """Enable/disable auto scroll"""
@@ -222,36 +228,9 @@ class LogWidget(QWidget):
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(self.get_log_text())
-            self.add_log(f"Log saved to {file_path}", "INFO")
+            self._internal_log(f"Log saved to {file_path}", "INFO")
         except Exception as e:
-            self.add_log(f"Error saving log: {str(e)}", "ERROR")
-
-
-class LogWidgetWithTabs(QWidget):
-    """Extended log widget with multiple tabs/categories"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setup_ui()
-
-    def setup_ui(self):
-        """Setup user interface"""
-        layout = QVBoxLayout(self)
-
-        # For now, just use single log widget
-        # Can be extended to support multiple categories
-        self.main_log = LogWidget()
-        layout.addWidget(self.main_log)
-
-    def add_log(self, message: str, level: str = "INFO", category: str = "main"):
-        """Add log message to specified category"""
-        # For now, all messages go to main log
-        self.main_log.add_log(message, level)
-
-    def clear_log(self, category: str = "main"):
-        """Clear log for specified category"""
-        self.main_log.clear_log()
+            self._internal_log(f"Error saving log: {str(e)}", "ERROR")
 
 
 # Export the main class for external use
