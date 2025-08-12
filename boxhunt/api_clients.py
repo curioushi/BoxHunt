@@ -140,9 +140,10 @@ class APIManager:
         # Initialize WebsiteClient if enabled (doesn't need API key)
         if "website" in enabled_sources and api_keys["website"]:
             from .website_client import WebsiteClient
+
             self.clients["website"] = WebsiteClient(
                 respect_robots=Config.RESPECT_ROBOTS_TXT,
-                max_depth=Config.MAX_SCRAPING_DEPTH
+                max_depth=Config.MAX_SCRAPING_DEPTH,
             )
             logger.info("Website scraping client initialized")
 

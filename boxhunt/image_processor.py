@@ -8,7 +8,6 @@ import logging
 import os
 import time
 from io import BytesIO
-from urllib.parse import urlparse
 
 import aiohttp
 import imagehash
@@ -27,7 +26,7 @@ class ImageProcessor:
         self.downloaded_hashes: set[str] = set()
         self.failed_urls: set[str] = set()
         self.domain_name = domain_name
-        
+
         if domain_name:
             self.images_dir = Config.get_domain_images_dir(domain_name)
         else:
@@ -98,7 +97,6 @@ class ImageProcessor:
             if width < Config.MIN_IMAGE_WIDTH or height < Config.MIN_IMAGE_HEIGHT:
                 logger.debug(f"Image too small: {width}x{height}")
                 return None
-
 
             return image
 

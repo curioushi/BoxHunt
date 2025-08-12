@@ -163,39 +163,44 @@ def cmd_export(args):
 
 async def cmd_crawl_site(args):
     """Handle crawl-site command"""
-    from .website_client import WebsiteClient
+    from urllib.parse import urlparse
+
     from .image_processor import ImageProcessor
     from .storage import StorageManager
-    from urllib.parse import urlparse
+    from .website_client import WebsiteClient
 
     # Extract domain name from URL
     parsed_url = urlparse(args.url)
     domain_name = parsed_url.netloc.lower()
-    if domain_name.startswith('www.'):
+    if domain_name.startswith("www."):
         domain_name = domain_name[4:]
-    domain_name = domain_name.split(':')[0]  # Remove port if exists
+    domain_name = domain_name.split(":")[0]  # Remove port if exists
 
     print(f"🌐 开始爬取网站: {args.url}")
     print(f"   域名: {domain_name}")
     print(f"   最大图片数: {args.max_images}")
-    print(f"   爬取深度: {args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH}")
+    print(
+        f"   爬取深度: {args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH}"
+    )
 
     # Initialize components for website crawling with domain-specific storage
     website_client = WebsiteClient(
-        respect_robots=args.respect_robots if hasattr(args, 'respect_robots') else Config.RESPECT_ROBOTS_TXT,
-        max_depth=args.depth if hasattr(args, 'depth') else Config.MAX_SCRAPING_DEPTH
+        respect_robots=args.respect_robots
+        if hasattr(args, "respect_robots")
+        else Config.RESPECT_ROBOTS_TXT,
+        max_depth=args.depth if hasattr(args, "depth") else Config.MAX_SCRAPING_DEPTH,
     )
-    
+
     image_processor = ImageProcessor(domain_name=domain_name)
     storage_manager = StorageManager(domain_name=domain_name)
-    
+
     # Load existing hashes for deduplication
     image_processor.downloaded_hashes = storage_manager.get_existing_hashes()
 
     try:
         # Scrape images from website
         search_results = await website_client.scrape_website(args.url, args.max_images)
-        
+
         if not search_results:
             print("❌ 未找到任何图片")
             return
@@ -204,18 +209,20 @@ async def cmd_crawl_site(args):
 
         # Process images (download, validate, deduplicate)
         from tqdm.asyncio import tqdm
-        
+
         processed_results = []
         pbar = tqdm(total=len(search_results), desc="处理图片", unit="img")
-        
-        batch_size = max(1, min(Config.MAX_CONCURRENT_REQUESTS, len(search_results) // 10))
-        
+
+        batch_size = max(
+            1, min(Config.MAX_CONCURRENT_REQUESTS, len(search_results) // 10)
+        )
+
         for i in range(0, len(search_results), batch_size):
             batch = search_results[i : i + batch_size]
             batch_results = await image_processor.process_image_batch(batch)
             processed_results.extend(batch_results)
             pbar.update(len(batch))
-            
+
         pbar.close()
 
         # Save metadata
@@ -224,7 +231,7 @@ async def cmd_crawl_site(args):
             if storage_manager.save_image_metadata(processed_results):
                 saved_count = len(processed_results)
 
-        print(f"✅ 网站爬取完成:")
+        print("✅ 网站爬取完成:")
         print(f"   发现图片: {len(search_results)}")
         print(f"   成功下载: {saved_count}")
         print(f"   保存位置: {Config.get_domain_images_dir(domain_name)}")
@@ -239,7 +246,7 @@ def cmd_config(args):
     """Handle config command"""
     print("\n⚙️  Current Configuration:")
     print(f"  Data directory: {Config.DATA_DIR}")
-    print(f"  Storage: Domain-based (data/{{domain_name}}/)")
+    print("  Storage: Domain-based (data/{domain_name}/)")
     print(f"  Min image size: {Config.MIN_IMAGE_WIDTH}×{Config.MIN_IMAGE_HEIGHT}")
     print(f"  Max file size: {Config.MAX_FILE_SIZE / (1024 * 1024):.1f} MB")
     print(f"  Request delay: {Config.REQUEST_DELAY}s")
@@ -302,28 +309,26 @@ def create_parser():
     )
 
     # Crawl-site command
-    crawl_site_parser = subparsers.add_parser("crawl-site", help="Crawl images from a specific website")
+    crawl_site_parser = subparsers.add_parser(
+        "crawl-site", help="Crawl images from a specific website"
+    )
     crawl_site_parser.add_argument(
-        "url",
-        type=str,
-        help="Website URL to crawl for images"
+        "url", type=str, help="Website URL to crawl for images"
     )
     crawl_site_parser.add_argument(
         "--max-images",
         type=int,
         default=Config.MAX_IMAGES_PER_WEBSITE,
-        help=f"Maximum images to download (default: {Config.MAX_IMAGES_PER_WEBSITE})"
+        help=f"Maximum images to download (default: {Config.MAX_IMAGES_PER_WEBSITE})",
     )
     crawl_site_parser.add_argument(
         "--depth",
         type=int,
         default=Config.MAX_SCRAPING_DEPTH,
-        help=f"Maximum crawling depth (default: {Config.MAX_SCRAPING_DEPTH})"
+        help=f"Maximum crawling depth (default: {Config.MAX_SCRAPING_DEPTH})",
     )
     crawl_site_parser.add_argument(
-        "--respect-robots",
-        action="store_true",
-        help="Respect robots.txt restrictions"
+        "--respect-robots", action="store_true", help="Respect robots.txt restrictions"
     )
 
     # Resume command

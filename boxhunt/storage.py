@@ -22,12 +22,16 @@ class StorageManager:
         self.domain_name = domain_name
         if domain_name:
             self.images_dir = Config.get_domain_images_dir(domain_name)
-            self.metadata_file = metadata_file or Config.get_domain_metadata_file(domain_name)
+            self.metadata_file = metadata_file or Config.get_domain_metadata_file(
+                domain_name
+            )
         else:
             # Legacy support: if no domain specified, use old behavior
-            self.images_dir = os.path.join(Config.DATA_DIR, "images") 
-            self.metadata_file = metadata_file or os.path.join(Config.DATA_DIR, "metadata.csv")
-        
+            self.images_dir = os.path.join(Config.DATA_DIR, "images")
+            self.metadata_file = metadata_file or os.path.join(
+                Config.DATA_DIR, "metadata.csv"
+            )
+
         self.ensure_directories()
         self.init_metadata_file()
 

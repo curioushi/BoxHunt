@@ -51,7 +51,7 @@ class Config:
     DATA_DIR = "data"
 
     # User agent for web requests
-    USER_AGENT = "BoxHunt/1.0 (Image Scraper for Research Purposes)"
+    USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 
     @classmethod
     def get_all_keywords(cls) -> list[str]:
@@ -62,7 +62,7 @@ class Config:
     def get_domain_images_dir(cls, domain_name: str) -> str:
         """Get images directory for a specific domain"""
         return os.path.join(cls.DATA_DIR, domain_name, "images")
-    
+
     @classmethod
     def get_domain_metadata_file(cls, domain_name: str) -> str:
         """Get metadata file path for a specific domain"""
