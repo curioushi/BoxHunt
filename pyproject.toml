@@ -68,7 +68,12 @@ known-first-party = ["boxhunt"]
 
 [dependency-groups]
 dev = [
+    "nuitka>=2.7.12",
+    "ordered-set>=4.1.0",
+    "patchelf>=0.17.2.4",
+    "pip>=25.2",
     "ruff>=0.12.8",
+    "zstandard>=0.23.0",
 ]
 
 [project.scripts]

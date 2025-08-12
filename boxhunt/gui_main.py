@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 # Import GUI components
-from .gui.main_window import BoxMakerMainWindow
+from boxhunt.gui.main_window import BoxMakerMainWindow
 
 
 def setup_application() -> QApplication:
