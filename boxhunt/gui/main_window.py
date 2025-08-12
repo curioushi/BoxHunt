@@ -40,6 +40,9 @@ class BoxMakerMainWindow(QMainWindow):
         self.setup_ui()
         self.setup_connections()
 
+        # Auto-maximize on startup
+        self.showMaximized()
+
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("BoxHunt - 3D Box Creation Tool")
@@ -70,20 +73,25 @@ class BoxMakerMainWindow(QMainWindow):
 
         # Create widgets
         self.image_annotation = ImageAnnotationWidget()
-        self.image_annotation.setMinimumSize(400, 300)
+        self.image_annotation.setMinimumSize(200, 300)
 
         self.crop_preview = CropPreviewWidget()
-        self.crop_preview.setMinimumSize(300, 300)
+        self.crop_preview.setMinimumSize(100, 300)
 
         self.box3d_viewer = Box3DViewerWidget()
-        self.box3d_viewer.setMinimumSize(400, 300)
+        self.box3d_viewer.setMinimumSize(200, 300)
 
         top_splitter.addWidget(self.image_annotation)
         top_splitter.addWidget(self.crop_preview)
         top_splitter.addWidget(self.box3d_viewer)
-        top_splitter.setStretchFactor(0, 1)  # Image annotation takes more space
-        top_splitter.setStretchFactor(1, 1)  # Crop preview
-        top_splitter.setStretchFactor(2, 1)  # 3D viewer takes more space
+
+        # Set strict stretch factors for 2:1:2 ratio
+        top_splitter.setStretchFactor(0, 4)  # Image annotation: 4 parts
+        top_splitter.setStretchFactor(1, 2)  # Crop preview: 2 parts
+        top_splitter.setStretchFactor(2, 4)  # 3D viewer: 4 parts
+
+        # Set initial sizes to enforce ratio
+        top_splitter.setSizes([800, 400, 800])
 
         top_layout.addWidget(top_splitter)
 

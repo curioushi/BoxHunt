@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QVBoxLayout,
@@ -372,7 +373,9 @@ class Box3DViewerWidget(QWidget):
         # 3D renderer
         self.renderer = Box3DRenderer()
         self.renderer.status_message.connect(self.status_message.emit)
-        layout.addWidget(self.renderer)
+        # Renderer should expand to take all available space
+        self.renderer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.renderer, 1)  # stretch factor 1
 
         # Controls frame
         controls_frame = QFrame()
@@ -380,6 +383,9 @@ class Box3DViewerWidget(QWidget):
         controls_frame.setStyleSheet(
             "QFrame { background-color: #f8f8f8; border: 1px solid #ddd; }"
         )
+        # Set fixed height for controls frame
+        controls_frame.setFixedHeight(120)
+        controls_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         controls_layout = QVBoxLayout(controls_frame)
         controls_layout.setContentsMargins(10, 10, 10, 10)
         controls_layout.setSpacing(8)
@@ -440,7 +446,7 @@ class Box3DViewerWidget(QWidget):
 
         controls_layout.addLayout(button_layout)
 
-        layout.addWidget(controls_frame)
+        layout.addWidget(controls_frame, 0)  # stretch factor 0, no expansion
 
         # Initial update
         self.update_dimensions()
