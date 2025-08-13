@@ -101,14 +101,14 @@ class ImageCanvas(QLabel):
         self.drawing_mode = False
 
         # Annotation labels
-        self.annotation_labels = ["Front", "Back", "Left", "Right", "Top", "Bottom"]
+        self.annotation_labels = ["front", "back", "left", "right", "top", "bottom"]
         self.label_colors = [
-            QColor(255, 0, 0, 100),  # Front - Red
-            QColor(0, 255, 0, 100),  # Back - Green
-            QColor(0, 0, 255, 100),  # Left - Blue
-            QColor(255, 255, 0, 100),  # Right - Yellow
-            QColor(255, 0, 255, 100),  # Top - Magenta
-            QColor(0, 255, 255, 100),  # Bottom - Cyan
+            QColor(255, 0, 0, 100),  # front - Red
+            QColor(0, 255, 0, 100),  # back - Green
+            QColor(0, 0, 255, 100),  # left - Blue
+            QColor(255, 255, 0, 100),  # right - Yellow
+            QColor(255, 0, 255, 100),  # top - Magenta
+            QColor(0, 255, 255, 100),  # bottom - Cyan
         ]
 
         # Scale factor from displayed image to original image
@@ -572,6 +572,23 @@ class ImageCanvas(QLabel):
             else:
                 self.selected_annotation = None
             self.update()
+        # Quick label shortcuts
+        elif event.key() == Qt.Key_W:
+            # W = top
+            if self.selected_annotation:
+                self.set_annotation_label(self.selected_annotation, "top", 4)
+        elif event.key() == Qt.Key_S:
+            # S = front
+            if self.selected_annotation:
+                self.set_annotation_label(self.selected_annotation, "front", 0)
+        elif event.key() == Qt.Key_A:
+            # A = left
+            if self.selected_annotation:
+                self.set_annotation_label(self.selected_annotation, "left", 2)
+        elif event.key() == Qt.Key_D:
+            # D = right
+            if self.selected_annotation:
+                self.set_annotation_label(self.selected_annotation, "right", 3)
         super().keyPressEvent(event)
 
     def paintEvent(self, event: QPaintEvent):
@@ -847,7 +864,7 @@ class ImageAnnotationWidget(QWidget):
         # Instructions label
         instructions = QLabel(
             "Click 4 points to create polygon. Right-click to set label/undo. "
-            "Shift+click to drag corners."
+            "Shift+click to drag corners. Quick labels: W=top, S=front, A=left, D=right"
         )
         instructions.setStyleSheet("color: #666; font-size: 11px;")
         toolbar.addWidget(instructions)

@@ -4,6 +4,7 @@ Main window for BoxHunt 3D box creation tool
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
@@ -79,10 +80,10 @@ class BoxMakerMainWindow(QMainWindow):
         self.image_annotation.setMinimumSize(200, 200)
 
         self.crop_preview = CropPreviewWidget()
-        self.crop_preview.setMinimumSize(200, 150)
+        self.crop_preview.setMinimumSize(200, 100)
 
         self.box3d_viewer = Box3DViewerWidget()
-        self.box3d_viewer.setMinimumSize(200, 150)
+        self.box3d_viewer.setMinimumSize(200, 100)
 
         top_splitter.addWidget(self.image_annotation)
         top_splitter.addWidget(self.crop_preview)
@@ -90,11 +91,11 @@ class BoxMakerMainWindow(QMainWindow):
 
         # Set strict stretch factors for 2:1:2 ratio
         top_splitter.setStretchFactor(0, 4)  # Image annotation: 4 parts
-        top_splitter.setStretchFactor(1, 3)  # Crop preview: 2 parts
-        top_splitter.setStretchFactor(2, 3)  # 3D viewer: 4 parts
+        top_splitter.setStretchFactor(1, 2)  # Crop preview: 2 parts
+        top_splitter.setStretchFactor(2, 2)  # 3D viewer: 2 parts
 
         # Set initial sizes to enforce ratio
-        top_splitter.setSizes([800, 600, 600])
+        top_splitter.setSizes([800, 400, 400])
 
         top_layout.addWidget(top_splitter)
 
@@ -120,7 +121,7 @@ class BoxMakerMainWindow(QMainWindow):
         # Add widgets to main splitter
         main_splitter.addWidget(top_widget)
         main_splitter.addWidget(bottom_splitter)
-        main_splitter.setStretchFactor(0, 5)  # Top takes 1/2 of space
+        main_splitter.setStretchFactor(0, 7)  # Top takes 1/2 of space
         main_splitter.setStretchFactor(1, 3)  # Bottom takes 1/2 of space
 
         main_layout.addWidget(main_splitter)
@@ -329,32 +330,67 @@ class BoxMakerMainWindow(QMainWindow):
                 else:
                     logger.warning(f"No texture available for {face_name} face")
 
-            # Export dimension.json with current box dimensions
+            # Copy original image to output directory as origin.jpg
             try:
-                dimensions = {
-                    "width": self.box3d_viewer.renderer.box_width,
-                    "height": self.box3d_viewer.renderer.box_height,
-                    "length": self.box3d_viewer.renderer.box_depth,
+                origin_path = export_dir / "origin.jpg"
+                shutil.copy2(self.current_image_path, origin_path)
+                logger.info(f"Copied original image to: {origin_path}")
+            except Exception as e:
+                logger.error(f"Failed to copy original image: {str(e)}")
+
+            # Export annotation data to JSON
+            try:
+                # Get annotations from image annotation widget
+                annotations_data = self.image_annotation.get_annotations()
+
+                # Build annotation info with coordinates and labels
+                annotation_info = []
+                for annotation in annotations_data:
+                    if (
+                        annotation.get("type") == "polygon"
+                        and len(annotation.get("points", [])) == 4
+                    ):
+                        annotation_info.append(
+                            {
+                                "label": annotation.get("label", "Unlabeled"),
+                                "points": annotation.get("points", []),
+                                "type": "polygon",
+                            }
+                        )
+
+                # Create complete export data including dimensions and annotations
+                export_data = {
+                    "dimensions": {
+                        "width": self.box3d_viewer.renderer.box_width,
+                        "height": self.box3d_viewer.renderer.box_height,
+                        "length": self.box3d_viewer.renderer.box_depth,
+                    },
+                    "annotations": annotation_info,
                 }
 
-                dimension_path = export_dir / "dimensions.json"
-                with open(dimension_path, "w", encoding="utf-8") as f:
-                    json.dump(dimensions, f, indent=2, ensure_ascii=False)
+                # Export complete data to JSON
+                data_path = export_dir / "data.json"
+                with open(data_path, "w", encoding="utf-8") as f:
+                    json.dump(export_data, f, indent=2, ensure_ascii=False)
 
-                logger.info(f"Exported dimensions.json: {dimensions}")
+                logger.info(
+                    f"Exported data.json with {len(annotation_info)} annotations"
+                )
 
             except Exception as e:
-                logger.error(f"Failed to export dimensions.json: {str(e)}")
+                logger.error(f"Failed to export annotation data: {str(e)}")
 
             # Show success message
             if exported_count > 0:
+                # Count annotation files
+                annotation_count = len(self.image_annotation.get_annotations())
                 QMessageBox.information(
                     self,
                     "Export Complete",
-                    f"Exported {exported_count} texture files and dimensions.json to:\n{export_dir}",
+                    f"Exported {exported_count} texture files, data.json ({annotation_count} annotations), and origin.jpg to:\n{export_dir}",
                 )
                 self.status_bar.showMessage(
-                    f"Exported {exported_count} textures and dimensions to {export_dir}"
+                    f"Exported {exported_count} textures, {annotation_count} annotations, and origin image to {export_dir}"
                 )
             else:
                 QMessageBox.warning(

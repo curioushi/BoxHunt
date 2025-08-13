@@ -88,7 +88,7 @@ class Box3DGenerator:
     """3D box model generator from 2D annotations"""
 
     def __init__(self):
-        self.face_labels = ["Front", "Back", "Left", "Right", "Top", "Bottom"]
+        self.face_labels = ["front", "back", "left", "right", "top", "bottom"]
 
     def generate_from_crops(
         self, crops: list[dict], box_dimensions: tuple[float, float, float] = None
