@@ -124,6 +124,7 @@ class FileBrowserWidget(QWidget):
 
         self.supported_formats = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
         self.current_directory = None
+        self.project_manager = None  # Will be set by main window
 
         # Initialize QSettings
         self.settings = QSettings("BoxHunt", "BoxHuntConfig")
@@ -175,6 +176,9 @@ class FileBrowserWidget(QWidget):
         self.image_list.itemClicked.connect(self.on_image_item_clicked)
         self.image_list.itemDoubleClicked.connect(self.on_image_double_clicked)
         self.image_list.itemSelectionChanged.connect(self.on_image_selection_changed)
+        # Enable context menu
+        self.image_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.image_list.customContextMenuRequested.connect(self.show_context_menu)
         # Install event filter for keyboard support
         self.image_list.installEventFilter(self)
         right_layout.addWidget(self.image_list, 4)
@@ -305,12 +309,45 @@ class FileBrowserWidget(QWidget):
             # Sort by name
             image_files.sort(key=lambda x: x.name.lower())
 
-            # Add to list
+            # Add to list with annotation status
             for image_file in image_files:
                 item = QListWidgetItem(image_file.name)
                 item.setData(Qt.UserRole, str(image_file))
                 item.setToolTip(str(image_file))
+
+                # Set annotation status if project manager is available
+                if self.project_manager and self.project_manager.is_project_open():
+                    self.set_item_annotation_status(item, image_file.name)
+
                 self.image_list.addItem(item)
+
+        except Exception:
+            pass  # Silently ignore errors
+
+    def set_item_annotation_status(self, item: QListWidgetItem, filename: str):
+        """Set the annotation status for a list item"""
+        try:
+            if not self.project_manager:
+                return
+
+            image_info = self.project_manager.get_image_info(filename)
+
+            # If image is not in database, it needs annotation by default
+            if not image_info:
+                # Default: needs annotation, not annotated
+                needs_annotation = True
+                is_annotated = False
+            else:
+                needs_annotation = image_info["needs_annotation"]
+                is_annotated = image_info["is_annotated"]
+
+            # Set text color based on needs_annotation
+            if not needs_annotation:
+                item.setForeground(Qt.gray)
+
+            # Add checkmark for annotated images
+            if is_annotated:
+                item.setText(f"✓ {filename}")
 
         except Exception:
             pass  # Silently ignore errors
@@ -446,3 +483,105 @@ class FileBrowserWidget(QWidget):
                     self.on_image_double_clicked(current_item)
                 return True  # Event handled
         return super().eventFilter(source, event)
+
+    def set_project_manager(self, project_manager):
+        """Set the project manager for annotation status"""
+        self.project_manager = project_manager
+
+    def get_image_files(self) -> list:
+        """Get list of image filenames in current directory"""
+        try:
+            if not self.current_directory:
+                return []
+
+            directory = Path(self.current_directory)
+            if not directory.exists():
+                return []
+
+            image_files = []
+            for ext in self.supported_formats:
+                pattern = f"*{ext}"
+                image_files.extend([f.name for f in directory.glob(pattern)])
+                pattern = f"*{ext.upper()}"
+                image_files.extend([f.name for f in directory.glob(pattern)])
+
+            return sorted(image_files, key=str.lower)
+
+        except Exception:
+            return []
+
+    def clear_image_list(self):
+        """Clear the image list"""
+        self.image_list.clear()
+        self.image_preview.clear_preview()
+        self.image_info_label.setText("No image selected")
+
+    def refresh_annotation_status(self):
+        """Refresh annotation status for all items"""
+        try:
+            for i in range(self.image_list.count()):
+                item = self.image_list.item(i)
+                if item:
+                    filename = item.data(Qt.UserRole)
+                    if filename:
+                        filename = Path(filename).name
+                        self.set_item_annotation_status(item, filename)
+        except Exception:
+            pass  # Silently ignore errors
+
+    def show_context_menu(self, position):
+        """Show context menu for image list items"""
+        try:
+            if not self.project_manager or not self.project_manager.is_project_open():
+                return
+
+            item = self.image_list.itemAt(position)
+            if not item:
+                return
+
+            filename = Path(item.data(Qt.UserRole)).name
+            image_info = self.project_manager.get_image_info(filename)
+
+            if not image_info:
+                return
+
+            from PySide6.QtWidgets import QMenu
+
+            menu = QMenu(self)
+
+            # Toggle annotation need
+            needs_annotation = image_info["needs_annotation"]
+            toggle_action = menu.addAction("Toggle Annotation")
+
+            # Store the current values to avoid closure issues
+            current_filename = filename
+            new_status = not needs_annotation
+            toggle_action.triggered.connect(
+                lambda: self.toggle_annotation_status(current_filename, new_status)
+            )
+
+            menu.exec(self.image_list.mapToGlobal(position))
+
+        except Exception:
+            pass  # Silently ignore errors
+
+    def toggle_annotation_status(self, filename: str, needs_annotation: bool):
+        """Toggle annotation status for an image"""
+        try:
+            if self.project_manager.set_image_annotation_status(
+                filename, needs_annotation
+            ):
+                # Refresh the item display
+                for i in range(self.image_list.count()):
+                    item = self.image_list.item(i)
+                    if item and Path(item.data(Qt.UserRole)).name == filename:
+                        # Reset the item text first (remove checkmark if present)
+                        original_text = Path(item.data(Qt.UserRole)).name
+                        item.setText(original_text)
+                        # Reset foreground color
+                        item.setForeground(Qt.black)
+                        # Set the correct status
+                        self.set_item_annotation_status(item, filename)
+                        break
+        except Exception:
+            pass  # Silently ignore errors

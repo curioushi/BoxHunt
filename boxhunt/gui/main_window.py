@@ -2,9 +2,7 @@
 Main window for BoxHunt 3D box creation tool
 """
 
-import json
 import os
-import shutil
 from pathlib import Path
 
 import imagehash
@@ -25,10 +23,12 @@ from PySide6.QtWidgets import (
 
 from .box3d_viewer import Box3DViewerWidget
 from .crop_preview import CropPreviewWidget
+from .export_dialog import ExportDialog
 from .file_browser import FileBrowserWidget
 from .image_annotation import ImageAnnotationWidget
 from .log_widget import LogWidget
 from .logger import logger
+from .project_manager import ProjectManager
 
 
 class BoxMakerMainWindow(QMainWindow):
@@ -41,13 +41,15 @@ class BoxMakerMainWindow(QMainWindow):
         super().__init__(parent)
 
         self.current_image_path = None
-        self.annotations = []  # List of annotation rectangles
 
         # Initialize QSettings
         self.settings = QSettings("BoxHunt", "BoxHuntConfig")
 
         # Load output directory from settings
         self.output_directory = self.settings.value("output_directory", os.getcwd())
+
+        # Initialize project manager
+        self.project_manager = ProjectManager(self)
 
         self.setup_ui()
         self.setup_connections()
@@ -149,11 +151,19 @@ class BoxMakerMainWindow(QMainWindow):
         # File menu
         file_menu = menubar.addMenu("File")
 
-        # Open image
-        open_action = QAction("Open Image", self)
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.open_image)
-        file_menu.addAction(open_action)
+        # Project management
+        create_project_action = QAction("Create Project", self)
+        create_project_action.triggered.connect(self.create_project)
+        file_menu.addAction(create_project_action)
+
+        open_project_action = QAction("Open Project", self)
+        open_project_action.setShortcut("Ctrl+O")
+        open_project_action.triggered.connect(self.open_project)
+        file_menu.addAction(open_project_action)
+
+        close_project_action = QAction("Close Project", self)
+        close_project_action.triggered.connect(self.close_project)
+        file_menu.addAction(close_project_action)
 
         file_menu.addSeparator()
 
@@ -168,19 +178,33 @@ class BoxMakerMainWindow(QMainWindow):
         toolbar = QToolBar()
         self.addToolBar(toolbar)
 
-        # Open image button
-        open_action = QAction("Open", self)
-        open_action.setToolTip("Open image file")
-        open_action.triggered.connect(self.open_image)
-        toolbar.addAction(open_action)
+        # Project management buttons
+        create_project_action = QAction("New Project", self)
+        create_project_action.setToolTip("Create new annotation project")
+        create_project_action.triggered.connect(self.create_project)
+        toolbar.addAction(create_project_action)
+
+        open_project_action = QAction("Open Project", self)
+        open_project_action.setToolTip("Open existing annotation project")
+        open_project_action.triggered.connect(self.open_project)
+        toolbar.addAction(open_project_action)
 
         toolbar.addSeparator()
 
-        # Export textures button
-        export_action = QAction("Export", self)
+        # Submit annotation button
+        submit_action = QAction("Submit", self)
+        submit_action.setShortcut("Ctrl+Return")
+        submit_action.setToolTip("Save annotation and go to next image (Ctrl+Enter)")
+        submit_action.triggered.connect(self.submit_annotation)
+        toolbar.addAction(submit_action)
+
+        toolbar.addSeparator()
+
+        # Export all annotations button
+        export_action = QAction("Export All", self)
         export_action.setShortcut("Ctrl+E")
-        export_action.setToolTip("Export all face textures to files")
-        export_action.triggered.connect(self.export_textures)
+        export_action.setToolTip("Export all annotations with progress")
+        export_action.triggered.connect(self.export_all_annotations)
         toolbar.addAction(export_action)
 
         # Set output directory button
@@ -197,6 +221,12 @@ class BoxMakerMainWindow(QMainWindow):
         next_image_action.setToolTip("Go to next image (Ctrl+N)")
         next_image_action.triggered.connect(self.next_image)
         toolbar.addAction(next_image_action)
+
+        skip_image_action = QAction("Skip Image", self)
+        skip_image_action.setShortcut("Ctrl+M")
+        skip_image_action.setToolTip("Mark as skip and go to next image (Ctrl+M)")
+        skip_image_action.triggered.connect(self.skip_current_image)
+        toolbar.addAction(skip_image_action)
 
         prev_image_action = QAction("Previous Image", self)
         prev_image_action.setShortcut("Ctrl+P")
@@ -237,17 +267,149 @@ class BoxMakerMainWindow(QMainWindow):
         self.crop_preview.status_message.connect(self.status_bar.showMessage)
         self.box3d_viewer.status_message.connect(self.status_bar.showMessage)
 
-    def open_image(self):
-        """Open image file dialog"""
-        file_path, _ = QFileDialog.getOpenFileName(
+        # Connect project manager signals
+        self.project_manager.project_opened.connect(self.on_project_opened)
+        self.project_manager.project_closed.connect(self.on_project_closed)
+        self.project_manager.annotation_saved.connect(self.on_annotation_saved)
+        self.project_manager.annotation_loaded.connect(self.on_annotation_loaded)
+
+        # Set project manager in file browser
+        self.file_browser.set_project_manager(self.project_manager)
+
+    def create_project(self):
+        """Create a new annotation project"""
+        directory = QFileDialog.getExistingDirectory(
             self,
-            "Open Image",
-            "",
-            "Image Files (*.png *.jpg *.jpeg *.bmp *.tiff *.webp);;All Files (*)",
+            "Select Project Directory",
+            self.output_directory,
         )
 
-        if file_path:
-            self.load_image_from_path(file_path)
+        if directory:
+            if self.project_manager.create_project(directory):
+                self.status_bar.showMessage(f"Created project: {directory}")
+
+    def open_project(self):
+        """Open an existing annotation project"""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Project Directory",
+            self.output_directory,
+        )
+
+        if directory:
+            if self.project_manager.open_project(directory):
+                self.status_bar.showMessage(f"Opened project: {directory}")
+
+    def close_project(self):
+        """Close current project"""
+        if self.project_manager.is_project_open():
+            self.project_manager.close_project()
+            self.status_bar.showMessage("Project closed")
+        else:
+            QMessageBox.information(self, "No Project", "No project is currently open.")
+
+    def on_project_opened(self, project_path: str):
+        """Handle project opened event"""
+        # Switch file browser to project directory
+        self.file_browser.navigate_to_directory(project_path)
+
+        # Update project database with current image files
+        image_files = self.file_browser.get_image_files()
+        if image_files:
+            self.project_manager.update_image_list(image_files)
+
+        # Refresh annotation status in file browser
+        self.file_browser.refresh_annotation_status()
+
+        # Update window title
+        self.setWindowTitle(f"BoxHunt - {Path(project_path).name}")
+
+    def on_project_closed(self):
+        """Handle project closed event"""
+        # Clear current image
+        self.current_image_path = None
+        self.image_annotation.clear_annotations()
+        self.box3d_viewer.clear_all_textures()
+
+        # Reset window title
+        self.setWindowTitle("BoxHunt - 3D Box Creation Tool")
+
+        # Clear file browser
+        self.file_browser.clear_image_list()
+
+    def on_annotation_saved(self, filename: str):
+        """Handle annotation saved event"""
+        self.status_bar.showMessage(f"Annotation saved for: {filename}")
+        # Refresh annotation status in file browser
+        self.file_browser.refresh_annotation_status()
+
+    def on_annotation_loaded(self, filename: str):
+        """Handle annotation loaded event"""
+        self.status_bar.showMessage(f"Annotation loaded for: {filename}")
+
+    def submit_annotation(self):
+        """Save current annotation and go to next image"""
+        if not self.project_manager.is_project_open():
+            QMessageBox.warning(self, "Warning", "No project is currently open.")
+            return
+
+        if not self.current_image_path:
+            QMessageBox.warning(self, "Warning", "No image is currently loaded.")
+            return
+
+        # Get current annotation data
+        annotations = self.image_annotation.get_annotations()
+        if not annotations:
+            QMessageBox.warning(self, "Warning", "No annotations to save.")
+            return
+
+        # Build complete annotation data (without crops to save space)
+        annotation_data = {
+            "annotations": annotations,
+            "box_dimensions": {
+                "width": self.box3d_viewer.renderer.box_width,
+                "height": self.box3d_viewer.renderer.box_height,
+                "length": self.box3d_viewer.renderer.box_depth,
+            },
+        }
+
+        # Save annotation
+        filename = Path(self.current_image_path).name
+        if self.project_manager.save_annotation(filename, annotation_data):
+            # Go to next image
+            self.next_image()
+        else:
+            QMessageBox.critical(self, "Error", "Failed to save annotation.")
+
+    def skip_current_image(self):
+        """Mark current image as skip and go to next image"""
+        if not self.project_manager.is_project_open():
+            QMessageBox.warning(self, "Warning", "No project is currently open.")
+            return
+
+        if not self.current_image_path:
+            QMessageBox.warning(self, "Warning", "No image is currently loaded.")
+            return
+
+        # Mark current image as not needing annotation
+        filename = Path(self.current_image_path).name
+        if self.project_manager.set_image_annotation_status(filename, False):
+            self.status_bar.showMessage(f"Marked {filename} as skip")
+            # Refresh annotation status in file browser
+            self.file_browser.refresh_annotation_status()
+            # Go to next image
+            self.next_image()
+        else:
+            QMessageBox.critical(self, "Error", "Failed to mark image as skip.")
+
+    def export_all_annotations(self):
+        """Export all annotations using the export dialog"""
+        if not self.project_manager.is_project_open():
+            QMessageBox.warning(self, "Warning", "No project is currently open.")
+            return
+
+        dialog = ExportDialog(self.project_manager, self)
+        dialog.exec()
 
     def load_image_from_path(self, image_path: str):
         """Load image from file path"""
@@ -265,12 +427,45 @@ class BoxMakerMainWindow(QMainWindow):
             # Set current image in file browser
             self.file_browser.set_current_image(image_path)
 
+            # Load annotation if project is open
+            if self.project_manager.is_project_open():
+                filename = Path(image_path).name
+                annotation_data = self.project_manager.load_annotation(filename)
+                if annotation_data:
+                    self.load_annotation_data(annotation_data)
+
             self.status_bar.showMessage(f"Loaded: {Path(image_path).name}")
             logger.info(f"Image loaded: {image_path}")
             self.image_loaded.emit(image_path)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load image: {str(e)}")
             logger.error(f"Error loading image: {str(e)}")
+
+    def load_annotation_data(self, annotation_data: dict):
+        """Load annotation data into the interface"""
+        try:
+            # Load annotations first
+            if "annotations" in annotation_data:
+                self.image_annotation.load_annotations(annotation_data["annotations"])
+
+            # Load box dimensions
+            if "box_dimensions" in annotation_data:
+                dims = annotation_data["box_dimensions"]
+                self.box3d_viewer.renderer.set_box_dimensions(
+                    dims.get("width", 1.0),
+                    dims.get("height", 1.0),
+                    dims.get("length", 1.0),
+                )
+
+            # Force update crop preview and 3D viewer
+            # The crop_preview should be updated automatically via signal connection,
+            # but we'll also trigger it manually to ensure it works
+            annotations = self.image_annotation.get_annotations()
+            if annotations:
+                self.crop_preview.update_crops(annotations)
+
+        except Exception as e:
+            logger.error(f"Failed to load annotation data: {str(e)}")
 
     def set_output_directory(self):
         """Set the output directory for exports"""
@@ -286,182 +481,6 @@ class BoxMakerMainWindow(QMainWindow):
             self.settings.setValue("output_directory", self.output_directory)
             self.status_bar.showMessage(f"Output directory set to: {directory}")
             logger.info(f"Output directory changed to: {directory}")
-
-    def get_texture_fallback_map(self):
-        """Get the texture fallback priority mapping"""
-        return {
-            "front": ["back", "left", "right", "top", "bottom"],
-            "back": ["front", "right", "left", "top", "bottom"],
-            "left": ["right", "front", "back", "top", "bottom"],
-            "right": ["left", "back", "front", "top", "bottom"],
-            "top": ["bottom", "front", "back", "left", "right"],
-            "bottom": ["top", "front", "back", "left", "right"],
-        }
-
-    def export_textures(self):
-        """Export all face textures to files with fallback strategy"""
-        if not self.current_image_path:
-            QMessageBox.warning(
-                self, "Warning", "No image loaded. Please load an image first."
-            )
-            return
-
-        # Get crop data from crop preview
-        crops_data = (
-            self.crop_preview.crop_data
-            if hasattr(self.crop_preview, "crop_data")
-            else []
-        )
-
-        if not crops_data:
-            QMessageBox.warning(
-                self,
-                "Warning",
-                "No crop data available. Please annotate some faces first.",
-            )
-            return
-
-        try:
-            # Create output directory structure
-            image_name = Path(self.current_image_path).stem
-            export_dir = Path(self.output_directory) / image_name
-
-            # Remove existing directory if it exists
-            if export_dir.exists():
-                shutil.rmtree(export_dir)
-                logger.info(f"Removed existing directory: {export_dir}")
-
-            export_dir.mkdir(parents=True, exist_ok=True)
-
-            # Build available textures mapping
-            available_textures = {}
-            for crop in crops_data:
-                label = crop.get("label", "").lower()
-                if label and "image" in crop:
-                    available_textures[label] = crop["image"]
-
-            # Get fallback mapping
-            fallback_map = self.get_texture_fallback_map()
-            face_names = ["front", "back", "left", "right", "top", "bottom"]
-
-            exported_count = 0
-
-            # Export each face with fallback strategy
-            for face_name in face_names:
-                texture_image = None
-                source_face = face_name
-
-                # Try to get texture for this face
-                if face_name in available_textures:
-                    texture_image = available_textures[face_name]
-                else:
-                    # Apply fallback strategy
-                    for fallback_face in fallback_map[face_name]:
-                        if fallback_face in available_textures:
-                            texture_image = available_textures[fallback_face]
-                            source_face = fallback_face
-                            logger.info(
-                                f"Using {fallback_face} texture for {face_name} face"
-                            )
-                            break
-
-                # Export the texture if available
-                if texture_image:
-                    output_path = export_dir / f"{face_name}.jpg"
-                    # Convert RGBA to RGB for JPEG compatibility
-                    if texture_image.mode == "RGBA":
-                        # Create white background
-                        rgb_image = Image.new(
-                            "RGB", texture_image.size, (255, 255, 255)
-                        )
-                        rgb_image.paste(
-                            texture_image, mask=texture_image.split()[-1]
-                        )  # Use alpha channel as mask
-                        rgb_image.save(output_path, "JPEG", quality=95)
-                    else:
-                        texture_image.save(output_path, "JPEG", quality=95)
-                    exported_count += 1
-
-                    if source_face != face_name:
-                        logger.info(
-                            f"Exported {face_name}.jpg (using {source_face} texture)"
-                        )
-                    else:
-                        logger.info(f"Exported {face_name}.jpg")
-                else:
-                    logger.warning(f"No texture available for {face_name} face")
-
-            # Copy original image to output directory as origin.jpg
-            try:
-                origin_path = export_dir / "origin.jpg"
-                shutil.copy2(self.current_image_path, origin_path)
-                logger.info(f"Copied original image to: {origin_path}")
-            except Exception as e:
-                logger.error(f"Failed to copy original image: {str(e)}")
-
-            # Export annotation data to JSON
-            try:
-                # Get annotations from image annotation widget
-                annotations_data = self.image_annotation.get_annotations()
-
-                # Build annotation info with coordinates and labels
-                annotation_info = []
-                for annotation in annotations_data:
-                    if (
-                        annotation.get("type") == "polygon"
-                        and len(annotation.get("points", [])) == 4
-                    ):
-                        annotation_info.append(
-                            {
-                                "label": annotation.get("label", "Unlabeled"),
-                                "points": annotation.get("points", []),
-                                "type": "polygon",
-                            }
-                        )
-
-                # Create complete export data including dimensions and annotations
-                export_data = {
-                    "dimensions": {
-                        "width": self.box3d_viewer.renderer.box_width,
-                        "height": self.box3d_viewer.renderer.box_height,
-                        "length": self.box3d_viewer.renderer.box_depth,
-                    },
-                    "annotations": annotation_info,
-                }
-
-                # Export complete data to JSON
-                data_path = export_dir / "data.json"
-                with open(data_path, "w", encoding="utf-8") as f:
-                    json.dump(export_data, f, indent=2, ensure_ascii=False)
-
-                logger.info(
-                    f"Exported data.json with {len(annotation_info)} annotations"
-                )
-
-            except Exception as e:
-                logger.error(f"Failed to export annotation data: {str(e)}")
-
-            # Show success message
-            if exported_count > 0:
-                # Count annotation files
-                annotation_count = len(self.image_annotation.get_annotations())
-                self.status_bar.showMessage(
-                    f"Exported {exported_count} textures (JPG), {annotation_count} annotations, and origin image to {export_dir}"
-                )
-
-                # Auto-advance to next image after successful export
-                self.next_image()
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Export Failed",
-                    "No textures were exported. Please ensure you have annotated at least one face.",
-                )
-
-        except Exception as e:
-            error_msg = f"Failed to export textures: {str(e)}"
-            QMessageBox.critical(self, "Export Error", error_msg)
-            logger.error(error_msg)
 
     def next_image(self):
         """Go to next image"""

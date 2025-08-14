@@ -43,10 +43,23 @@ from .utils import pil_to_qpixmap
 class AnnotationPolygon:
     """Represents a 4-point polygon annotation"""
 
+    # Static color mapping for annotation labels
+    LABEL_COLORS = {
+        "front": QColor(255, 0, 0, 100),  # Red
+        "back": QColor(0, 255, 0, 100),  # Green
+        "left": QColor(0, 0, 255, 100),  # Blue
+        "right": QColor(255, 255, 0, 100),  # Yellow
+        "top": QColor(255, 0, 255, 100),  # Magenta
+        "bottom": QColor(0, 255, 255, 100),  # Cyan
+    }
+
     def __init__(self, points: list[tuple[int, int]] = None, label: str = ""):
         self.points = points or []  # List of (x, y) tuples
         self.label = label
-        self.color = QColor(255, 0, 0, 100)  # Semi-transparent red
+        # Set color based on label
+        self.color = self.LABEL_COLORS.get(
+            label.lower(), QColor(255, 0, 0, 100)
+        )  # Default red
         self.is_complete = len(self.points) == 4
 
     def add_point(self, x: int, y: int):
@@ -147,14 +160,8 @@ class ImageCanvas(QLabel):
 
         # Annotation labels
         self.annotation_labels = ["front", "back", "left", "right", "top", "bottom"]
-        self.label_colors = [
-            QColor(255, 0, 0, 100),  # front - Red
-            QColor(0, 255, 0, 100),  # back - Green
-            QColor(0, 0, 255, 100),  # left - Blue
-            QColor(255, 255, 0, 100),  # right - Yellow
-            QColor(255, 0, 255, 100),  # top - Magenta
-            QColor(0, 255, 255, 100),  # bottom - Cyan
-        ]
+        # Use colors from AnnotationPolygon
+        self.label_colors = list(AnnotationPolygon.LABEL_COLORS.values())
 
         # Scale factor from displayed image to original image
         self.scale_factor = 1.0
@@ -878,6 +885,10 @@ class ImageCanvas(QLabel):
         self.update()
         self.annotations_changed.emit(self.annotations)
 
+    def load_annotations(self, annotations_data: list[dict]):
+        """Load annotations from dictionaries (alias for set_annotations)"""
+        self.set_annotations(annotations_data)
+
 
 class ImageAnnotationWidget(QWidget):
     """Main widget for image annotation"""
@@ -944,6 +955,14 @@ class ImageAnnotationWidget(QWidget):
         """Load image for annotation"""
         self.canvas.load_image(image_path)
         self.canvas.setFocus()  # Set focus for key events
+
+    def load_annotations(self, annotations_data: list[dict]):
+        """Load annotations from dictionaries"""
+        self.canvas.load_annotations(annotations_data)
+
+    def get_annotations(self) -> list[dict]:
+        """Get all annotations as dictionaries"""
+        return self.canvas.get_annotations()
 
     def clear_annotations(self):
         """Clear all annotations"""
@@ -1131,10 +1150,6 @@ class ImageAnnotationWidget(QWidget):
                 x, y, z = filtered_points[i]
                 r, g, b = filtered_colors[i]
                 f.write(f"{x:.6f} {y:.6f} {z:.6f} {int(r)} {int(g)} {int(b)}\n")
-
-    def get_annotations(self) -> list[dict]:
-        """Get current annotations"""
-        return self.canvas.get_annotations()
 
     def set_annotations(self, annotations: list[dict]):
         """Set annotations"""
