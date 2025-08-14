@@ -8,6 +8,7 @@ from PySide6.QtCore import (
     QDir,
     QEvent,
     QFileInfo,
+    QSettings,
     Qt,
     Signal,
 )
@@ -124,6 +125,9 @@ class FileBrowserWidget(QWidget):
         self.supported_formats = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
         self.current_directory = None
 
+        # Initialize QSettings
+        self.settings = QSettings("BoxHunt", "BoxHuntConfig")
+
         self.setup_ui()
         self.setup_initial_directory()
 
@@ -221,13 +225,19 @@ class FileBrowserWidget(QWidget):
 
     def setup_initial_directory(self):
         """Setup initial directory"""
-        # Start in current working directory
-        current_path = QDir.currentPath()
-        if Path(current_path).exists():
-            self.navigate_to_directory(current_path)
+        # Try to load last directory from settings
+        last_directory = self.settings.value("file_browser_directory", "")
+
+        if last_directory and Path(last_directory).exists():
+            self.navigate_to_directory(last_directory)
         else:
-            # Fallback to home directory if current path doesn't exist
-            self.navigate_to_directory(QDir.homePath())
+            # Start in current working directory
+            current_path = QDir.currentPath()
+            if Path(current_path).exists():
+                self.navigate_to_directory(current_path)
+            else:
+                # Fallback to home directory if current path doesn't exist
+                self.navigate_to_directory(QDir.homePath())
 
     def navigate_to_directory(self, directory_path: str):
         """Navigate to specific directory"""
@@ -235,6 +245,9 @@ class FileBrowserWidget(QWidget):
             path = Path(directory_path)
             if path.exists() and path.is_dir():
                 self.current_directory = str(path)
+
+                # Save directory to settings
+                self.settings.setValue("file_browser_directory", self.current_directory)
 
                 # Update tree view
                 index = self.file_system_model.index(self.current_directory)
@@ -370,6 +383,57 @@ class FileBrowserWidget(QWidget):
         """Refresh current directory"""
         if self.current_directory:
             self.update_image_list()
+
+    def next_image(self):
+        """Go to next image in the list"""
+        try:
+            current_row = self.image_list.currentRow()
+            if current_row < self.image_list.count() - 1:
+                self.image_list.setCurrentRow(current_row + 1)
+                current_item = self.image_list.currentItem()
+                if current_item:
+                    self.on_image_double_clicked(current_item)
+        except Exception:
+            pass
+
+    def previous_image(self):
+        """Go to previous image in the list"""
+        try:
+            current_row = self.image_list.currentRow()
+            if current_row > 0:
+                self.image_list.setCurrentRow(current_row - 1)
+                current_item = self.image_list.currentItem()
+                if current_item:
+                    self.on_image_double_clicked(current_item)
+        except Exception:
+            pass
+
+    def get_current_image_index(self) -> int:
+        """Get current image index in the list"""
+        return self.image_list.currentRow()
+
+    def get_image_count(self) -> int:
+        """Get total number of images in the list"""
+        return self.image_list.count()
+
+    def set_current_image(self, image_path: str):
+        """Set current image in the list"""
+        try:
+            if not image_path:
+                return
+
+            # Find the item with matching image path
+            for i in range(self.image_list.count()):
+                item = self.image_list.item(i)
+                if item and item.data(Qt.UserRole) == image_path:
+                    self.image_list.setCurrentRow(i)
+                    # Update preview and info
+                    self.image_preview.set_image(image_path)
+                    info_text = self.image_preview.get_image_info(image_path)
+                    self.image_info_label.setText(info_text)
+                    break
+        except Exception:
+            pass
 
     def eventFilter(self, source, event):
         """Event filter to handle keyboard events"""

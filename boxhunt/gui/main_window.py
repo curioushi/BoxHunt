@@ -9,7 +9,7 @@ from pathlib import Path
 
 import imagehash
 from PIL import Image
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -42,7 +42,12 @@ class BoxMakerMainWindow(QMainWindow):
 
         self.current_image_path = None
         self.annotations = []  # List of annotation rectangles
-        self.output_directory = os.getcwd()  # Default to current working directory
+
+        # Initialize QSettings
+        self.settings = QSettings("BoxHunt", "BoxHuntConfig")
+
+        # Load output directory from settings
+        self.output_directory = self.settings.value("output_directory", os.getcwd())
 
         self.setup_ui()
         self.setup_connections()
@@ -186,6 +191,21 @@ class BoxMakerMainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
+        # Navigation shortcuts
+        next_image_action = QAction("Next Image", self)
+        next_image_action.setShortcut("Ctrl+N")
+        next_image_action.setToolTip("Go to next image (Ctrl+N)")
+        next_image_action.triggered.connect(self.next_image)
+        toolbar.addAction(next_image_action)
+
+        prev_image_action = QAction("Previous Image", self)
+        prev_image_action.setShortcut("Ctrl+P")
+        prev_image_action.setToolTip("Go to previous image (Ctrl+P)")
+        prev_image_action.triggered.connect(self.previous_image)
+        toolbar.addAction(prev_image_action)
+
+        toolbar.addSeparator()
+
         # Rename images with pHash button
         rename_images_action = QAction("Rename Images with pHash", self)
         rename_images_action.setToolTip(
@@ -241,6 +261,10 @@ class BoxMakerMainWindow(QMainWindow):
             # Load the new image
             self.image_annotation.load_image(image_path)
             self.crop_preview.set_image(image_path)  # Set image for crop preview
+
+            # Set current image in file browser
+            self.file_browser.set_current_image(image_path)
+
             self.status_bar.showMessage(f"Loaded: {Path(image_path).name}")
             logger.info(f"Image loaded: {image_path}")
             self.image_loaded.emit(image_path)
@@ -258,6 +282,8 @@ class BoxMakerMainWindow(QMainWindow):
 
         if directory:
             self.output_directory = directory
+            # Save to settings
+            self.settings.setValue("output_directory", self.output_directory)
             self.status_bar.showMessage(f"Output directory set to: {directory}")
             logger.info(f"Output directory changed to: {directory}")
 
@@ -299,6 +325,12 @@ class BoxMakerMainWindow(QMainWindow):
             # Create output directory structure
             image_name = Path(self.current_image_path).stem
             export_dir = Path(self.output_directory) / image_name
+
+            # Remove existing directory if it exists
+            if export_dir.exists():
+                shutil.rmtree(export_dir)
+                logger.info(f"Removed existing directory: {export_dir}")
+
             export_dir.mkdir(parents=True, exist_ok=True)
 
             # Build available textures mapping
@@ -335,16 +367,27 @@ class BoxMakerMainWindow(QMainWindow):
 
                 # Export the texture if available
                 if texture_image:
-                    output_path = export_dir / f"{face_name}.png"
-                    texture_image.save(output_path, "PNG")
+                    output_path = export_dir / f"{face_name}.jpg"
+                    # Convert RGBA to RGB for JPEG compatibility
+                    if texture_image.mode == "RGBA":
+                        # Create white background
+                        rgb_image = Image.new(
+                            "RGB", texture_image.size, (255, 255, 255)
+                        )
+                        rgb_image.paste(
+                            texture_image, mask=texture_image.split()[-1]
+                        )  # Use alpha channel as mask
+                        rgb_image.save(output_path, "JPEG", quality=95)
+                    else:
+                        texture_image.save(output_path, "JPEG", quality=95)
                     exported_count += 1
 
                     if source_face != face_name:
                         logger.info(
-                            f"Exported {face_name}.png (using {source_face} texture)"
+                            f"Exported {face_name}.jpg (using {source_face} texture)"
                         )
                     else:
-                        logger.info(f"Exported {face_name}.png")
+                        logger.info(f"Exported {face_name}.jpg")
                 else:
                     logger.warning(f"No texture available for {face_name} face")
 
@@ -402,14 +445,12 @@ class BoxMakerMainWindow(QMainWindow):
             if exported_count > 0:
                 # Count annotation files
                 annotation_count = len(self.image_annotation.get_annotations())
-                QMessageBox.information(
-                    self,
-                    "Export Complete",
-                    f"Exported {exported_count} texture files, data.json ({annotation_count} annotations), and origin.jpg to:\n{export_dir}",
-                )
                 self.status_bar.showMessage(
-                    f"Exported {exported_count} textures, {annotation_count} annotations, and origin image to {export_dir}"
+                    f"Exported {exported_count} textures (JPG), {annotation_count} annotations, and origin image to {export_dir}"
                 )
+
+                # Auto-advance to next image after successful export
+                self.next_image()
             else:
                 QMessageBox.warning(
                     self,
@@ -421,6 +462,14 @@ class BoxMakerMainWindow(QMainWindow):
             error_msg = f"Failed to export textures: {str(e)}"
             QMessageBox.critical(self, "Export Error", error_msg)
             logger.error(error_msg)
+
+    def next_image(self):
+        """Go to next image"""
+        self.file_browser.next_image()
+
+    def previous_image(self):
+        """Go to previous image"""
+        self.file_browser.previous_image()
 
     def rename_images_with_hash(self):
         """Rename images in a directory using color hash and average hash"""

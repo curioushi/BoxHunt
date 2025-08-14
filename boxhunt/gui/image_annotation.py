@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import requests
 from PIL import Image
-from PySide6.QtCore import QBuffer, QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QBuffer, QEvent, QPoint, QRect, QSettings, QSize, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -23,7 +23,11 @@ from PySide6.QtGui import (
     QPolygon,
 )
 from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QLabel,
+    QLineEdit,
     QMenu,
     QProgressDialog,
     QPushButton,
@@ -88,6 +92,41 @@ class AnnotationPolygon:
         xs = [p[0] for p in self.points]
         ys = [p[1] for p in self.points]
         return QRect(min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+
+
+class VGGTUrlDialog(QDialog):
+    """Dialog for configuring VGGT server URL"""
+
+    def __init__(self, default_url="localhost:22334", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("VGGT Server Configuration")
+        self.setModal(True)
+        self.setFixedSize(400, 150)
+
+        # Create layout
+        layout = QFormLayout()
+
+        # URL input
+        self.url_edit = QLineEdit(default_url)
+        self.url_edit.setPlaceholderText(
+            "Enter VGGT server URL (e.g., localhost:22334)"
+        )
+        layout.addRow("Server URL:", self.url_edit)
+
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addRow(button_box)
+
+        self.setLayout(layout)
+
+    def get_url(self) -> str:
+        """Get the entered URL"""
+        url = self.url_edit.text().strip()
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "http://" + url
+        return url
 
 
 class ImageCanvas(QLabel):
@@ -850,6 +889,10 @@ class ImageAnnotationWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        # Initialize QSettings for VGGT URL
+        self.settings = QSettings("BoxHunt", "BoxHuntConfig")
+        self.vggt_url = self.settings.value("vggt_url", "http://localhost:22334")
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -868,7 +911,7 @@ class ImageAnnotationWidget(QWidget):
 
         # VGGT button
         vggt_btn = QPushButton("VGGT")
-        vggt_btn.setToolTip("Send image to VGGT server for 3D reconstruction")
+        vggt_btn.setToolTip("Send image to VGGT server for 3D reconstruction (V)")
         vggt_btn.clicked.connect(self.vggt_inference)
         toolbar.addWidget(vggt_btn)
 
@@ -877,7 +920,7 @@ class ImageAnnotationWidget(QWidget):
         # Instructions label
         instructions = QLabel(
             "Click 4 points to create polygon. Right-click to set label/undo. "
-            "Shift+click to drag corners. Quick labels: W=top, S=front, A=left, D=right"
+            "Shift+click to drag corners. Quick labels: W=top, S=front, A=left, D=right. V=VGGT"
         )
         instructions.setStyleSheet("color: #666; font-size: 11px;")
         toolbar.addWidget(instructions)
@@ -893,6 +936,9 @@ class ImageAnnotationWidget(QWidget):
         self.canvas.setFocusPolicy(Qt.StrongFocus)
 
         layout.addWidget(self.canvas)
+
+        # Install event filter for keyboard shortcuts
+        self.installEventFilter(self)
 
     def load_image(self, image_path: str):
         """Load image for annotation"""
@@ -963,9 +1009,28 @@ class ImageAnnotationWidget(QWidget):
             progress.setValue(30)
 
             start_time = time.time()
-            response = requests.post(
-                "http://localhost:22334/inference", json=request_data
-            )
+
+            # Send request with current URL
+            try:
+                # Extract base URL from saved URL
+                base_url = self.vggt_url.replace("/inference", "")
+                if base_url.endswith("/"):
+                    base_url = base_url[:-1]
+
+                response = requests.post(
+                    f"{base_url}/inference", json=request_data, timeout=30
+                )
+            except requests.exceptions.RequestException:
+                # Request failed, show URL configuration dialog
+                self._show_url_config_dialog()
+                # Try again with new URL
+                base_url = self.vggt_url.replace("/inference", "")
+                if base_url.endswith("/"):
+                    base_url = base_url[:-1]
+                response = requests.post(
+                    f"{base_url}/inference", json=request_data, timeout=30
+                )
+
             end_time = time.time()
             logger.info(
                 f"VGGT inference completed, cost {end_time - start_time} seconds"
@@ -987,17 +1052,17 @@ class ImageAnnotationWidget(QWidget):
                         data["world_points_conf"]
                     )
 
-                    # Get colors from processed image
-                    processed_image = self._decode_base64_image(data["processed_image"])
-                    colors_image = np.array(processed_image)
+                    # # Get colors from processed image
+                    # processed_image = self._decode_base64_image(data["processed_image"])
+                    # colors_image = np.array(processed_image)
 
-                    # Save PLY file
-                    # TODO(Haoqi): remove this after testing
-                    progress.setLabelText("Saving PLY file...")
-                    progress.setValue(90)
-                    self._save_ply_file(world_points, world_points_conf, colors_image)
-                    logger.info(f"Intrinsic: {intrinsic}")
-                    logger.info("Postprocessing completed - PLY file saved")
+                    # # Save PLY file
+                    # # TODO(Haoqi): remove this after testing
+                    # progress.setLabelText("Saving PLY file...")
+                    # progress.setValue(90)
+                    # self._save_ply_file(world_points, world_points_conf, colors_image)
+                    # logger.info(f"Intrinsic: {intrinsic}")
+                    # logger.info("Postprocessing completed - PLY file saved")
 
                     # Estimate box dimensions from polygon annotations
                     progress.setLabelText("Estimating box dimensions...")
@@ -1008,12 +1073,12 @@ class ImageAnnotationWidget(QWidget):
 
                     progress.setLabelText("VGGT processing completed!")
                     progress.setValue(100)
-                    self.status_message.emit(
-                        "VGGT processing completed - PLY file saved"
-                    )
+                    self.status_message.emit("VGGT processing completed")
                 else:
                     self.status_message.emit(f"VGGT error: {result['message']}")
             else:
+                # Request failed, show URL configuration dialog
+                self._show_url_config_dialog()
                 self.status_message.emit(f"VGGT request failed: {response.status_code}")
 
         except Exception as e:
@@ -1074,6 +1139,28 @@ class ImageAnnotationWidget(QWidget):
     def set_annotations(self, annotations: list[dict]):
         """Set annotations"""
         self.canvas.set_annotations(annotations)
+
+    def _show_url_config_dialog(self):
+        """Show URL configuration dialog when VGGT request fails"""
+        try:
+            # Extract base URL for display
+            display_url = self.vggt_url.replace("http://", "").replace("https://", "")
+            if display_url.endswith("/inference"):
+                display_url = display_url[:-10]
+
+            dialog = VGGTUrlDialog(display_url, self)
+            if dialog.exec() == QDialog.Accepted:
+                new_url = dialog.get_url()
+                if new_url != self.vggt_url:
+                    self.vggt_url = new_url
+                    # Save to QSettings
+                    self.settings.setValue("vggt_url", new_url)
+                    self.settings.sync()
+                    logger.info(f"VGGT URL updated to: {new_url}")
+                    self.status_message.emit(f"VGGT URL updated to: {new_url}")
+        except Exception as e:
+            logger.error(f"Error showing URL config dialog: {e}")
+            self.status_message.emit(f"Error configuring VGGT URL: {str(e)}")
 
     def _estimate_box_dimensions(self, world_points, world_points_conf, intrinsic):
         """Estimate box dimensions from polygon annotations using 3D point cloud"""
@@ -1326,3 +1413,13 @@ class ImageAnnotationWidget(QWidget):
 
         except Exception as e:
             logger.error(f"Error calculating box ratios: {e}")
+
+    def eventFilter(self, source, event):
+        """Event filter to handle keyboard shortcuts"""
+        if event.type() == QEvent.KeyPress:
+            key_event = event
+            if key_event.key() == Qt.Key_V:
+                # V key triggers VGGT inference
+                self.vggt_inference()
+                return True  # Event handled
+        return super().eventFilter(source, event)
