@@ -7,12 +7,15 @@ import os
 import shutil
 from pathlib import Path
 
+import imagehash
+from PIL import Image
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QSplitter,
     QStatusBar,
     QToolBar,
@@ -180,6 +183,16 @@ class BoxMakerMainWindow(QMainWindow):
         set_output_dir_action.setToolTip("Set output directory for exports")
         set_output_dir_action.triggered.connect(self.set_output_directory)
         toolbar.addAction(set_output_dir_action)
+
+        toolbar.addSeparator()
+
+        # Rename images with pHash button
+        rename_images_action = QAction("Rename Images with pHash", self)
+        rename_images_action.setToolTip(
+            "Rename images using color hash and average hash"
+        )
+        rename_images_action.triggered.connect(self.rename_images_with_hash)
+        toolbar.addAction(rename_images_action)
 
     def setup_connections(self):
         """Setup signal-slot connections"""
@@ -407,4 +420,141 @@ class BoxMakerMainWindow(QMainWindow):
         except Exception as e:
             error_msg = f"Failed to export textures: {str(e)}"
             QMessageBox.critical(self, "Export Error", error_msg)
+            logger.error(error_msg)
+
+    def rename_images_with_hash(self):
+        """Rename images in a directory using color hash and average hash"""
+        # Select directory containing images
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Directory with Images",
+            self.output_directory,
+        )
+
+        if not directory:
+            return
+
+        try:
+            directory_path = Path(directory)
+            image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+
+            # Find all image files
+            image_files = []
+            for ext in image_extensions:
+                image_files.extend(directory_path.glob(f"*{ext}"))
+                image_files.extend(directory_path.glob(f"*{ext.upper()}"))
+
+            if not image_files:
+                QMessageBox.warning(
+                    self,
+                    "No Images Found",
+                    f"No image files found in directory: {directory}",
+                )
+                return
+
+            # Confirm with user
+            reply = QMessageBox.question(
+                self,
+                "Confirm Rename",
+                f"Found {len(image_files)} images. This will rename all images to format: {{color_hash}}_{{average_hash}}.{{original_extension}}\n\nContinue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+            renamed_count = 0
+            failed_count = 0
+            skipped_count = 0
+
+            # Create progress dialog
+            progress = QProgressDialog(
+                "Renaming images...", "Cancel", 0, len(image_files), self
+            )
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setAutoClose(False)
+            progress.setAutoReset(False)
+
+            for i, image_file in enumerate(image_files):
+                # Update progress
+                progress.setValue(i)
+                progress.setLabelText(f"Processing: {image_file.name}")
+
+                # Check if user cancelled
+                if progress.wasCanceled():
+                    logger.info("Image renaming cancelled by user")
+                    break
+
+                try:
+                    # Open image for hash calculation only
+                    with Image.open(image_file) as img:
+                        # Calculate hashes
+                        color_hash = imagehash.colorhash(img, binbits=3)
+                        average_hash = imagehash.average_hash(img, hash_size=8)
+
+                    # Get original file extension
+                    original_extension = image_file.suffix.lower()
+
+                    # Create new filename with original extension
+                    new_filename = f"{color_hash}_{average_hash}{original_extension}"
+                    new_path = image_file.parent / new_filename
+
+                    # Skip if filename already exists
+                    if new_path.exists():
+                        logger.warning(
+                            f"Skipped {image_file.name}: target filename {new_filename} already exists"
+                        )
+                        skipped_count += 1
+                        continue
+
+                    # Move file using OS move operation
+                    image_file.rename(new_path)
+
+                    renamed_count += 1
+                    logger.info(f"Renamed: {image_file.name} -> {new_path.name}")
+
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"Failed to rename {image_file.name}: {str(e)}")
+
+            # Close progress dialog
+            progress.setValue(len(image_files))
+            progress.close()
+
+            # Show results
+            if progress.wasCanceled():
+                message = f"Operation cancelled. Renamed {renamed_count} images"
+                if skipped_count > 0:
+                    message += f"\nSkipped {skipped_count} images (duplicate filenames)"
+                if failed_count > 0:
+                    message += f"\nFailed to rename {failed_count} images"
+
+                QMessageBox.information(self, "Operation Cancelled", message)
+                self.status_bar.showMessage(
+                    f"Cancelled: Renamed {renamed_count} images in {directory}"
+                )
+            elif renamed_count > 0:
+                message = f"Successfully renamed {renamed_count} images"
+                if skipped_count > 0:
+                    message += f"\nSkipped {skipped_count} images (duplicate filenames)"
+                if failed_count > 0:
+                    message += f"\nFailed to rename {failed_count} images"
+
+                QMessageBox.information(self, "Rename Complete", message)
+                self.status_bar.showMessage(
+                    f"Renamed {renamed_count} images in {directory}"
+                )
+            else:
+                message = "No images were renamed"
+                if skipped_count > 0:
+                    message += f"\nSkipped {skipped_count} images (duplicate filenames)"
+                if failed_count > 0:
+                    message += f"\nFailed to rename {failed_count} images"
+
+                QMessageBox.warning(self, "Rename Failed", message)
+
+        except Exception as e:
+            error_msg = f"Failed to rename images: {str(e)}"
+            QMessageBox.critical(self, "Rename Error", error_msg)
             logger.error(error_msg)
