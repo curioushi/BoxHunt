@@ -148,7 +148,6 @@ class LogWidget(QWidget):
     def clear_log(self):
         """Clear all log messages"""
         self.log_text.clear()
-        self._internal_log("Log cleared", "INFO")
 
     def set_auto_scroll(self, enabled: bool):
         """Enable/disable auto scroll"""
@@ -165,7 +164,3 @@ class LogWidget(QWidget):
 
         # Note: This doesn't re-filter existing messages,
         # only affects new messages
-
-
-# Export the main class for external use
-LogWidget = LogWidget
