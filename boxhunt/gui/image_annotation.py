@@ -2,10 +2,15 @@
 2D image annotation widget for marking box faces
 """
 
+import base64
+import io
+import time
 from pathlib import Path
 
+import numpy as np
+import requests
 from PIL import Image
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QBuffer, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -20,6 +25,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QLabel,
     QMenu,
+    QProgressDialog,
     QPushButton,
     QToolBar,
     QVBoxLayout,
@@ -859,6 +865,12 @@ class ImageAnnotationWidget(QWidget):
         clear_btn.clicked.connect(self.clear_annotations)
         toolbar.addWidget(clear_btn)
 
+        # VGGT button
+        vggt_btn = QPushButton("VGGT")
+        vggt_btn.setToolTip("Send image to VGGT server for 3D reconstruction")
+        vggt_btn.clicked.connect(self.send_to_vggt)
+        toolbar.addWidget(vggt_btn)
+
         toolbar.addSeparator()
 
         # Instructions label
@@ -893,6 +905,157 @@ class ImageAnnotationWidget(QWidget):
         self.canvas.update()
         self.annotations_changed.emit([])
         self.status_message.emit("All annotations cleared")
+
+    def send_to_vggt(self):
+        """Send current image to VGGT server for 3D reconstruction"""
+        if not self.canvas.original_pixmap:
+            self.status_message.emit("No image loaded")
+            return
+
+        # Create progress dialog
+        progress = QProgressDialog(
+            "Processing with VGGT inference server...", None, 0, 100, self
+        )
+        progress.setWindowTitle("3D Processing")
+        progress.setModal(True)
+        progress.setAutoClose(True)
+        progress.setMinimumDuration(0)  # Show immediately
+
+        # Remove close button from title bar
+        progress.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+
+        # Set dialog size and style
+        progress.setMinimumWidth(400)
+        progress.setMinimumHeight(100)
+        progress.setLabelText("Sending image to 3D inference server...")
+        progress.setValue(10)  # Start with some progress
+
+        progress.show()
+
+        try:
+            self.status_message.emit("Sending to VGGT server...")
+
+            # Convert QPixmap to PIL Image using QBuffer
+            qbuffer = QBuffer()
+            qbuffer.open(QBuffer.ReadWrite)
+            self.canvas.original_pixmap.save(qbuffer, "PNG")
+            qbuffer.seek(0)
+            pil_image = Image.open(io.BytesIO(qbuffer.data()))
+
+            # Convert to JPEG bytes
+            jpeg_buffer = io.BytesIO()
+            pil_image.save(jpeg_buffer, "JPEG")
+            jpeg_buffer.seek(0)
+
+            # Encode to base64
+            image_b64 = base64.b64encode(jpeg_buffer.getvalue()).decode("utf-8")
+
+            # Prepare request
+            request_data = {
+                "image": image_b64,
+                "image_format": "jpeg",
+                "confidence_threshold": 3.0,
+            }
+
+            # Send request
+            logger.info("Sending request to VGGT inference server...")
+            progress.setLabelText("Sending request to VGGT server...")
+            progress.setValue(30)
+
+            start_time = time.time()
+            response = requests.post(
+                "http://localhost:22334/inference", json=request_data
+            )
+            end_time = time.time()
+            logger.info(
+                f"VGGT inference completed, cost {end_time - start_time} seconds"
+            )
+
+            progress.setLabelText("Processing inference results...")
+            progress.setValue(70)
+
+            if response.status_code == 200:
+                result = response.json()
+                if result["status"] == "success":
+                    data = result["data"]
+
+                    # Decode world points and confidence
+                    world_points = self._decode_base64_numpy(data["world_points"])
+                    world_points_conf = self._decode_base64_numpy(
+                        data["world_points_conf"]
+                    )
+
+                    # Get colors from processed image
+                    processed_image = self._decode_base64_image(data["processed_image"])
+                    colors_image = np.array(processed_image)
+
+                    # Save PLY file
+                    # TODO(Haoqi): remove this after testing
+                    progress.setLabelText("Saving PLY file...")
+                    progress.setValue(90)
+                    self._save_ply_file(world_points, world_points_conf, colors_image)
+                    logger.info("Postprocessing completed - PLY file saved")
+
+                    progress.setLabelText("VGGT processing completed!")
+                    progress.setValue(100)
+                    self.status_message.emit(
+                        "VGGT processing completed - PLY file saved"
+                    )
+                else:
+                    self.status_message.emit(f"VGGT error: {result['message']}")
+            else:
+                self.status_message.emit(f"VGGT request failed: {response.status_code}")
+
+        except Exception as e:
+            self.status_message.emit(f"VGGT error: {str(e)}")
+            logger.error(f"VGGT error: {e}")
+        finally:
+            # Close progress dialog
+            progress.close()
+
+    def _decode_base64_image(self, image_b64: str) -> Image.Image:
+        """Decode base64 image data"""
+        image_bytes = base64.b64decode(image_b64)
+        return Image.open(io.BytesIO(image_bytes))
+
+    def _decode_base64_numpy(self, array_b64: str) -> np.ndarray:
+        """Decode base64 numpy array"""
+        array_bytes = base64.b64decode(array_b64)
+        buffer = io.BytesIO(array_bytes)
+        return np.load(buffer)
+
+    def _save_ply_file(self, world_points, world_points_conf, colors_image):
+        """Save PLY file with filtered points"""
+        H, W = world_points.shape[:2]
+
+        # Reshape data
+        points_flat = world_points.reshape(-1, 3)
+        conf_flat = world_points_conf.reshape(-1)
+        colors_flat = colors_image.reshape(-1, 3)
+
+        # Apply confidence filter
+        valid_mask = conf_flat >= 3
+        filtered_points = points_flat[valid_mask]
+        filtered_colors = colors_flat[valid_mask]
+
+        # Save PLY file
+        ply_path = "vggt_output_point_cloud.ply"
+        with open(ply_path, "w") as f:
+            f.write("ply\n")
+            f.write("format ascii 1.0\n")
+            f.write(f"element vertex {len(filtered_points)}\n")
+            f.write("property float x\n")
+            f.write("property float y\n")
+            f.write("property float z\n")
+            f.write("property uchar red\n")
+            f.write("property uchar green\n")
+            f.write("property uchar blue\n")
+            f.write("end_header\n")
+
+            for i in range(len(filtered_points)):
+                x, y, z = filtered_points[i]
+                r, g, b = filtered_colors[i]
+                f.write(f"{x:.6f} {y:.6f} {z:.6f} {int(r)} {int(g)} {int(b)}\n")
 
     def get_annotations(self) -> list[dict]:
         """Get current annotations"""
