@@ -744,6 +744,40 @@ class Box3DViewerWidget(QWidget):
         else:
             self.status_message.emit("No crop data for 3D model")
 
+    def update_box_dimensions_from_ratios(
+        self, length: float, width: float, height: float
+    ):
+        """Update 3D box dimensions based on calculated ratios from image annotation"""
+        try:
+            # Update the renderer dimensions
+            self.renderer.set_box_dimensions(width, height, length)
+
+            # Update the sliders to match the new dimensions
+            width_slider_value = self.linear_to_log_slider(width)
+            height_slider_value = self.linear_to_log_slider(height)
+
+            # Update sliders without triggering valueChanged signals
+            self.width_slider.blockSignals(True)
+            self.height_slider.blockSignals(True)
+
+            self.width_slider.setValue(width_slider_value)
+            self.height_slider.setValue(height_slider_value)
+
+            self.width_slider.blockSignals(False)
+            self.height_slider.blockSignals(False)
+
+            # Update labels
+            self.width_label.setText(f"{width:.2f}")
+            self.height_label.setText(f"{height:.2f}")
+
+            # Show status message
+            self.status_message.emit(
+                f"3D box updated: {width:.2f}m x {height:.2f}m x {length:.2f}m"
+            )
+
+        except Exception as e:
+            self.status_message.emit(f"Error updating 3D box dimensions: {str(e)}")
+
     def clear_all_textures(self):
         """Clear all textures from the renderer"""
         self.renderer.clear_all_textures()

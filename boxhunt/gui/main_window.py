@@ -194,6 +194,11 @@ class BoxMakerMainWindow(QMainWindow):
         # Connect crop preview to 3D viewer
         self.crop_preview.crops_updated.connect(self.box3d_viewer.update_box_from_crops)
 
+        # Connect image annotation box ratios to 3D viewer
+        self.image_annotation.box_ratios_updated.connect(
+            self.box3d_viewer.update_box_dimensions_from_ratios
+        )
+
         # Connect status updates
         self.image_annotation.status_message.connect(self.status_bar.showMessage)
         self.crop_preview.status_message.connect(self.status_bar.showMessage)

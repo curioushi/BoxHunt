@@ -845,6 +845,7 @@ class ImageAnnotationWidget(QWidget):
 
     annotations_changed = Signal(list)
     status_message = Signal(str)
+    box_ratios_updated = Signal(float, float, float)  # length, width, height ratios
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -868,7 +869,7 @@ class ImageAnnotationWidget(QWidget):
         # VGGT button
         vggt_btn = QPushButton("VGGT")
         vggt_btn.setToolTip("Send image to VGGT server for 3D reconstruction")
-        vggt_btn.clicked.connect(self.send_to_vggt)
+        vggt_btn.clicked.connect(self.vggt_inference)
         toolbar.addWidget(vggt_btn)
 
         toolbar.addSeparator()
@@ -906,7 +907,7 @@ class ImageAnnotationWidget(QWidget):
         self.annotations_changed.emit([])
         self.status_message.emit("All annotations cleared")
 
-    def send_to_vggt(self):
+    def vggt_inference(self):
         """Send current image to VGGT server for 3D reconstruction"""
         if not self.canvas.original_pixmap:
             self.status_message.emit("No image loaded")
@@ -954,7 +955,6 @@ class ImageAnnotationWidget(QWidget):
             request_data = {
                 "image": image_b64,
                 "image_format": "jpeg",
-                "confidence_threshold": 3.0,
             }
 
             # Send request
@@ -979,6 +979,8 @@ class ImageAnnotationWidget(QWidget):
                 if result["status"] == "success":
                     data = result["data"]
 
+                    intrinsic = data["intrinsic"]
+
                     # Decode world points and confidence
                     world_points = self._decode_base64_numpy(data["world_points"])
                     world_points_conf = self._decode_base64_numpy(
@@ -994,7 +996,15 @@ class ImageAnnotationWidget(QWidget):
                     progress.setLabelText("Saving PLY file...")
                     progress.setValue(90)
                     self._save_ply_file(world_points, world_points_conf, colors_image)
+                    logger.info(f"Intrinsic: {intrinsic}")
                     logger.info("Postprocessing completed - PLY file saved")
+
+                    # Estimate box dimensions from polygon annotations
+                    progress.setLabelText("Estimating box dimensions...")
+                    progress.setValue(95)
+                    self._estimate_box_dimensions(
+                        world_points, world_points_conf, intrinsic
+                    )
 
                     progress.setLabelText("VGGT processing completed!")
                     progress.setValue(100)
@@ -1034,7 +1044,7 @@ class ImageAnnotationWidget(QWidget):
         colors_flat = colors_image.reshape(-1, 3)
 
         # Apply confidence filter
-        valid_mask = conf_flat >= 3
+        valid_mask = conf_flat >= 2
         filtered_points = points_flat[valid_mask]
         filtered_colors = colors_flat[valid_mask]
 
@@ -1064,3 +1074,255 @@ class ImageAnnotationWidget(QWidget):
     def set_annotations(self, annotations: list[dict]):
         """Set annotations"""
         self.canvas.set_annotations(annotations)
+
+    def _estimate_box_dimensions(self, world_points, world_points_conf, intrinsic):
+        """Estimate box dimensions from polygon annotations using 3D point cloud"""
+        try:
+            # Get current annotations
+            annotations = self.canvas.get_annotations()
+
+            # Check if we have required annotations (top, front, and left/right)
+            required_labels = ["top", "front"]
+            has_left = any(ann.get("label") == "left" for ann in annotations)
+            has_right = any(ann.get("label") == "right" for ann in annotations)
+
+            if not has_left and not has_right:
+                logger.warning(
+                    "Missing left or right annotation for dimension estimation"
+                )
+                return
+
+            # Check if all required annotations exist
+            missing_labels = []
+            for label in required_labels:
+                if not any(ann.get("label") == label for ann in annotations):
+                    missing_labels.append(label)
+
+            if missing_labels:
+                logger.warning(f"Missing annotations: {missing_labels}")
+                return
+
+            # Parse camera intrinsic matrix
+            intrinsic_matrix = np.array(intrinsic).reshape(3, 3)
+
+            # Get dimensions for each face
+            dimensions = {}
+
+            for annotation in annotations:
+                label = annotation.get("label")
+                if label not in ["top", "front", "left", "right"]:
+                    continue
+
+                points = annotation.get("points", [])
+                if len(points) != 4:
+                    continue
+
+                # Get 3D points within polygon mask
+                polygon_points_3d = self._get_points_in_polygon(
+                    world_points, world_points_conf, points
+                )
+
+                if len(polygon_points_3d) < 10:  # Need enough points for RANSAC
+                    logger.warning(f"Insufficient 3D points for {label} face")
+                    continue
+
+                # Fit plane using RANSAC
+                plane_params = self._fit_plane_ransac(
+                    polygon_points_3d, max_iterations=100, threshold=0.02
+                )
+
+                if plane_params is None:
+                    logger.warning(f"Failed to fit plane for {label} face")
+                    continue
+
+                # Calculate face dimensions
+                face_dimensions = self._calculate_face_dimensions(
+                    points, plane_params, intrinsic_matrix
+                )
+
+                if face_dimensions is not None:
+                    dimensions[label] = face_dimensions
+
+            # Calculate box dimensions
+            if len(dimensions) >= 3:
+                self._calculate_box_ratios(dimensions)
+            else:
+                logger.warning("Insufficient face dimensions for box ratio calculation")
+
+        except Exception as e:
+            logger.error(f"Error in box dimension estimation: {e}")
+
+    def _get_points_in_polygon(self, world_points, world_points_conf, polygon_points):
+        """Get 3D points that fall within the polygon mask"""
+        try:
+            H, W = world_points.shape[:2]
+
+            # Create polygon mask
+            from PIL import Image, ImageDraw
+
+            # Create a mask image
+            mask = Image.new("L", (W, H), 0)
+            draw = ImageDraw.Draw(mask)
+
+            # Convert polygon points to PIL format
+            pil_points = [(int(p[0]), int(p[1])) for p in polygon_points]
+            draw.polygon(pil_points, fill=255)
+
+            # Convert mask to numpy array
+            mask_array = np.array(mask)
+
+            # Get points within mask
+            valid_mask = (world_points_conf >= 2) & (mask_array > 0)
+            valid_points = world_points[valid_mask]
+
+            return valid_points
+
+        except Exception as e:
+            logger.error(f"Error getting points in polygon: {e}")
+            return np.array([])
+
+    def _fit_plane_ransac(self, points_3d, max_iterations=1000, threshold=0.02):
+        """Fit plane to 3D points using RANSAC"""
+        try:
+            if len(points_3d) < 3:
+                return None
+
+            best_plane = None
+            best_inliers = 0
+
+            for _ in range(max_iterations):
+                # Randomly sample 3 points
+                indices = np.random.choice(len(points_3d), 3, replace=False)
+                p1, p2, p3 = points_3d[indices]
+
+                # Calculate plane parameters (ax + by + cz + d = 0)
+                v1 = p2 - p1
+                v2 = p3 - p1
+                normal = np.cross(v1, v2)
+
+                if np.linalg.norm(normal) < 1e-6:
+                    continue
+
+                normal = normal / np.linalg.norm(normal)
+                d = -np.dot(normal, p1)
+
+                # Calculate distances to plane
+                distances = np.abs(np.dot(points_3d, normal) + d)
+
+                # Count inliers
+                inliers = np.sum(distances < threshold)
+
+                if inliers > best_inliers:
+                    best_inliers = inliers
+                    best_plane = (normal[0], normal[1], normal[2], d)
+
+            return best_plane
+
+        except Exception as e:
+            logger.error(f"Error in RANSAC plane fitting: {e}")
+            return None
+
+    def _calculate_face_dimensions(
+        self, polygon_points, plane_params, intrinsic_matrix
+    ):
+        """Calculate face dimensions from polygon corners and plane"""
+        try:
+            a, b, c, d = plane_params
+
+            # Convert polygon points to homogeneous coordinates
+            corners_2d = np.array(polygon_points, dtype=np.float32)
+
+            # Calculate ray directions from camera center
+            fx, fy = intrinsic_matrix[0, 0], intrinsic_matrix[1, 1]
+            cx, cy = intrinsic_matrix[0, 2], intrinsic_matrix[1, 2]
+
+            # Ray directions in camera coordinates
+            ray_dirs = []
+            for corner in corners_2d:
+                x, y = corner
+                # Convert to camera coordinates
+                x_cam = (x - cx) / fx
+                y_cam = (y - cy) / fy
+                ray_dir = np.array([x_cam, y_cam, 1.0])
+                ray_dir = ray_dir / np.linalg.norm(ray_dir)
+                ray_dirs.append(ray_dir)
+
+            # Calculate intersection points with plane
+            intersections = []
+            for ray_dir in ray_dirs:
+                # Ray-plane intersection: t = -(d + n·o) / (n·d)
+                # where o is ray origin (0,0,0), n is plane normal, d is ray direction
+                normal = np.array([a, b, c])
+                t = -d / np.dot(normal, ray_dir)
+                intersection = t * ray_dir
+                intersections.append(intersection)
+
+            # Calculate edge lengths
+            edges = []
+            for i in range(4):
+                p1 = intersections[i]
+                p2 = intersections[(i + 1) % 4]
+                edge_length = np.linalg.norm(p2 - p1)
+                edges.append(edge_length)
+
+            # Calculate face dimensions (average of opposite edges)
+            L1 = (edges[0] + edges[2]) / 2  # Average of edges 0 and 2
+            L2 = (edges[1] + edges[3]) / 2  # Average of edges 1 and 3
+
+            return (L1, L2)
+
+        except Exception as e:
+            logger.error(f"Error calculating face dimensions: {e}")
+            return None
+
+    def _calculate_box_ratios(self, dimensions):
+        """Calculate and display box length:width:height ratios"""
+        try:
+            # Extract dimensions based on face labels
+            length = []
+            width = []
+            height = []
+
+            if "top" in dimensions:
+                L1, L2 = dimensions["top"]
+                length.append(L1)  # L1 is length for top face
+                width.append(L2)  # L2 is width for top face
+
+            if "front" in dimensions:
+                L1, L2 = dimensions["front"]
+                height.append(L1)  # L1 is height for front face
+                width.append(L2)  # L2 is width for front face
+
+            # Check left/right faces for height and length
+            for label in ["left", "right"]:
+                if label in dimensions:
+                    L1, L2 = dimensions[label]
+                    height.append(L1)  # L1 is height for left/right face
+                    length.append(L2)  # L2 is length for left/right face
+
+            length = np.mean(length)
+            width = np.mean(width)
+            height = np.mean(height)
+
+            # Calculate ratios
+            if length and width and height:
+                # Normalize to length = 1
+                width_ratio = width / length
+                height_ratio = height / length
+
+                # Format as 1:x:x
+                ratio_str = f"1:{width_ratio:.3f}:{height_ratio:.3f}"
+
+                logger.info(
+                    f"Box dimensions - Length: {length:.3f}m, Width: {width:.3f}m, Height: {height:.3f}m"
+                )
+                logger.info(f"Box ratio (L:W:H): {ratio_str}")
+                self.status_message.emit(f"Box ratio: {ratio_str}")
+
+                # Emit signal to update 3D viewer with actual dimensions
+                self.box_ratios_updated.emit(1.0, width / length, height / length)
+            else:
+                logger.warning("Could not determine all box dimensions")
+
+        except Exception as e:
+            logger.error(f"Error calculating box ratios: {e}")
