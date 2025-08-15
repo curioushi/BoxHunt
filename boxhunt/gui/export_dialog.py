@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QFileDialog,
     QFormLayout,
@@ -32,11 +33,21 @@ class ExportWorker(QThread):
     progress_updated = Signal(int, str)  # progress, filename
     export_finished = Signal(bool, str)  # success, message
 
-    def __init__(self, annotations_data, project_path, output_dir, parent=None):
+    def __init__(
+        self,
+        annotations_data,
+        project_path,
+        output_dir,
+        export_assets=True,
+        export_training_dataset=False,
+        parent=None,
+    ):
         super().__init__(parent)
         self.annotations_data = annotations_data
         self.project_path = project_path
         self.output_dir = output_dir
+        self.export_assets = export_assets
+        self.export_training_dataset = export_training_dataset
 
     def run(self):
         """Run the export process"""
@@ -47,57 +58,140 @@ class ExportWorker(QThread):
             if not output_path.exists():
                 output_path.mkdir(parents=True, exist_ok=True)
 
-            total_annotations = len(self.annotations_data)
             exported_count = 0
             failed_count = 0
+            progress_counter = 0
 
-            for i, annotation_item in enumerate(self.annotations_data):
-                filename = annotation_item["filename"]
-                annotation = annotation_item["annotation"]
+            # Export assets if selected
+            if self.export_assets:
+                assets_output_dir = output_path / "assets"
+                if not assets_output_dir.exists():
+                    assets_output_dir.mkdir(parents=True, exist_ok=True)
 
-                # Update progress
-                self.progress_updated.emit(i, f"Exporting: {filename}")
+                for annotation_item in self.annotations_data:
+                    filename = annotation_item["filename"]
+                    annotation = annotation_item["annotation"]
 
-                try:
-                    # Create subdirectory for this image
-                    image_name = Path(filename).stem
-                    image_export_dir = output_path / image_name
-
-                    if image_export_dir.exists():
-                        shutil.rmtree(image_export_dir)
-
-                    image_export_dir.mkdir(parents=True, exist_ok=True)
-
-                    # Copy original image
-                    original_image_path = project_dir / filename
-                    if original_image_path.exists():
-                        origin_path = image_export_dir / "origin.jpg"
-                        shutil.copy2(original_image_path, origin_path)
-
-                    # Export annotation data
-                    data_path = image_export_dir / "data.json"
-                    with open(data_path, "w", encoding="utf-8") as f:
-                        json.dump(annotation, f, indent=2, ensure_ascii=False)
-
-                    # Generate and export textures from annotations
-                    self._generate_and_export_textures(
-                        annotation, original_image_path, image_export_dir
+                    # Update progress
+                    self.progress_updated.emit(
+                        progress_counter, f"Exporting assets: {filename}"
                     )
+                    progress_counter += 1
 
-                    exported_count += 1
+                    try:
+                        # Create subdirectory for this image
+                        image_name = Path(filename).stem
+                        image_export_dir = assets_output_dir / image_name
 
-                except Exception as e:
-                    failed_count += 1
-                    logger.error(f"Failed to export {filename}: {str(e)}")
+                        if image_export_dir.exists():
+                            shutil.rmtree(image_export_dir)
+
+                        image_export_dir.mkdir(parents=True, exist_ok=True)
+
+                        # Copy original image
+                        original_image_path = project_dir / filename
+                        if original_image_path.exists():
+                            origin_path = image_export_dir / "origin.jpg"
+                            shutil.copy2(original_image_path, origin_path)
+
+                        # Export annotation data
+                        data_path = image_export_dir / "data.json"
+                        with open(data_path, "w", encoding="utf-8") as f:
+                            json.dump(annotation, f, indent=2, ensure_ascii=False)
+
+                        # Generate and export textures from annotations
+                        self._generate_and_export_textures(
+                            annotation, original_image_path, image_export_dir
+                        )
+
+                        exported_count += 1
+
+                    except Exception as e:
+                        failed_count += 1
+                        logger.error(
+                            f"Failed to export assets for {filename}: {str(e)}"
+                        )
+
+            # Export training dataset if selected
+            if self.export_training_dataset:
+                # Get all images from project (including unannotated ones)
+                all_images = self._get_all_project_images()
+
+                positive_output_dir = output_path / "positive"
+                negative_output_dir = output_path / "negative"
+
+                if not positive_output_dir.exists():
+                    positive_output_dir.mkdir(parents=True, exist_ok=True)
+                if not negative_output_dir.exists():
+                    negative_output_dir.mkdir(parents=True, exist_ok=True)
+
+                # Create annotation data for positive samples
+                annotation_data = []
+
+                for image_file in all_images:
+                    # Update progress
+                    self.progress_updated.emit(
+                        progress_counter, f"Processing training data: {image_file}"
+                    )
+                    progress_counter += 1
+
+                    try:
+                        original_image_path = project_dir / image_file
+                        if not original_image_path.exists():
+                            continue
+
+                        # Check if this image has annotations
+                        has_annotations = any(
+                            item["filename"] == image_file
+                            for item in self.annotations_data
+                        )
+
+                        if has_annotations:
+                            # Copy to positive directory
+                            dest_path = positive_output_dir / image_file
+                            shutil.copy2(original_image_path, dest_path)
+
+                            # Add to annotation data
+                            annotation_item = next(
+                                item
+                                for item in self.annotations_data
+                                if item["filename"] == image_file
+                            )
+                            annotation_data.append(
+                                {
+                                    "filename": image_file,
+                                    "annotation": annotation_item["annotation"],
+                                }
+                            )
+                        else:
+                            # Copy to negative directory
+                            dest_path = negative_output_dir / image_file
+                            shutil.copy2(original_image_path, dest_path)
+
+                    except Exception as e:
+                        failed_count += 1
+                        logger.error(
+                            f"Failed to process training data for {image_file}: {str(e)}"
+                        )
+
+                # Save annotation.json
+                annotation_file_path = output_path / "annotation.json"
+                with open(annotation_file_path, "w", encoding="utf-8") as f:
+                    json.dump(annotation_data, f, indent=2, ensure_ascii=False)
 
             # Final progress update
-            self.progress_updated.emit(total_annotations, "Export completed")
+            self.progress_updated.emit(progress_counter, "Export completed")
 
             # Generate summary
             message = "Export completed!\n\n"
-            message += f"Successfully exported: {exported_count} annotations\n"
+            if self.export_assets:
+                message += f"Assets exported to: {output_path}/assets\n"
+            if self.export_training_dataset:
+                message += f"Training dataset exported to: {output_path}/positive and {output_path}/negative\n"
+                message += f"Annotation file: {output_path}/annotation.json\n"
+            message += f"Successfully exported: {exported_count} items\n"
             if failed_count > 0:
-                message += f"Failed to export: {failed_count} annotations\n"
+                message += f"Failed to export: {failed_count} items\n"
             message += f"Output directory: {self.output_dir}"
 
             self.export_finished.emit(True, message)
@@ -181,6 +275,22 @@ class ExportWorker(QThread):
         except Exception as e:
             logger.error(f"Failed to generate and export textures: {str(e)}")
 
+    def _get_all_project_images(self) -> list[str]:
+        """Get all image files from the project directory"""
+        try:
+            project_dir = Path(self.project_path)
+            image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+
+            image_files = []
+            for file_path in project_dir.iterdir():
+                if file_path.is_file() and file_path.suffix.lower() in image_extensions:
+                    image_files.append(file_path.name)
+
+            return sorted(image_files)
+        except Exception as e:
+            logger.error(f"Failed to get project images: {str(e)}")
+            return []
+
 
 class ExportDialog(QDialog):
     """Dialog for exporting all annotations"""
@@ -228,6 +338,16 @@ class ExportDialog(QDialog):
         self.select_dir_btn = QPushButton("Browse...")
         options_layout.addRow("Output Directory:", self.output_dir_label)
         options_layout.addRow("", self.select_dir_btn)
+
+        self.export_assets_checkbox = QCheckBox("Export Assets (Textures, Data)")
+        self.export_assets_checkbox.setChecked(True)  # Default checked
+        options_layout.addRow(self.export_assets_checkbox)
+
+        self.export_training_dataset_checkbox = QCheckBox(
+            "Export Training Dataset (Images, Annotations)"
+        )
+        self.export_training_dataset_checkbox.setChecked(False)  # Default unchecked
+        options_layout.addRow(self.export_training_dataset_checkbox)
 
         layout.addWidget(options_group)
 
@@ -303,6 +423,16 @@ class ExportDialog(QDialog):
             QMessageBox.warning(self, "Warning", "Please select an output directory.")
             return
 
+        # Check if at least one export option is selected
+        if (
+            not self.export_assets_checkbox.isChecked()
+            and not self.export_training_dataset_checkbox.isChecked()
+        ):
+            QMessageBox.warning(
+                self, "Warning", "Please select at least one export option."
+            )
+            return
+
         # Get all annotations
         annotations_data = self.project_manager.get_all_annotations()
         if not annotations_data:
@@ -313,7 +443,23 @@ class ExportDialog(QDialog):
         self.export_btn.setEnabled(False)
         self.select_dir_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setMaximum(len(annotations_data))
+
+        # Calculate total work based on selected options
+        total_work = 0
+        if self.export_assets_checkbox.isChecked():
+            total_work += len(annotations_data)
+        if self.export_training_dataset_checkbox.isChecked():
+            # We'll need to get all images for training dataset
+            project_dir = Path(self.project_manager.get_project_path())
+            image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+            all_images = [
+                f.name
+                for f in project_dir.iterdir()
+                if f.is_file() and f.suffix.lower() in image_extensions
+            ]
+            total_work += len(all_images)
+
+        self.progress_bar.setMaximum(total_work)
         self.progress_bar.setValue(0)
 
         self.log_text.clear()
@@ -323,7 +469,12 @@ class ExportDialog(QDialog):
 
         # Create and start worker thread
         self.export_worker = ExportWorker(
-            annotations_data, self.project_manager.get_project_path(), output_dir, self
+            annotations_data,
+            self.project_manager.get_project_path(),
+            output_dir,
+            self.export_assets_checkbox.isChecked(),
+            self.export_training_dataset_checkbox.isChecked(),
+            self,
         )
 
         self.export_worker.progress_updated.connect(self.update_progress)
