@@ -422,11 +422,24 @@ class FileBrowserWidget(QWidget):
             self.update_image_list()
 
     def next_image(self):
-        """Go to next image in the list"""
+        """Go to next image in the list, skipping images that don't need annotation"""
         try:
             current_row = self.image_list.currentRow()
+            next_row = current_row + 1
+
+            # Find next image that needs annotation
+            while next_row < self.image_list.count():
+                item = self.image_list.item(next_row)
+                if item and self._image_needs_annotation(item):
+                    self.image_list.setCurrentRow(next_row)
+                    self.on_image_double_clicked(item)
+                    return
+                next_row += 1
+
+            # If no more images need annotation, stay at current position
             if current_row < self.image_list.count() - 1:
-                self.image_list.setCurrentRow(current_row + 1)
+                # Move to the last image even if it doesn't need annotation
+                self.image_list.setCurrentRow(self.image_list.count() - 1)
                 current_item = self.image_list.currentItem()
                 if current_item:
                     self.on_image_double_clicked(current_item)
@@ -434,11 +447,24 @@ class FileBrowserWidget(QWidget):
             pass
 
     def previous_image(self):
-        """Go to previous image in the list"""
+        """Go to previous image in the list, skipping images that don't need annotation"""
         try:
             current_row = self.image_list.currentRow()
+            prev_row = current_row - 1
+
+            # Find previous image that needs annotation
+            while prev_row >= 0:
+                item = self.image_list.item(prev_row)
+                if item and self._image_needs_annotation(item):
+                    self.image_list.setCurrentRow(prev_row)
+                    self.on_image_double_clicked(item)
+                    return
+                prev_row -= 1
+
+            # If no previous images need annotation, stay at current position
             if current_row > 0:
-                self.image_list.setCurrentRow(current_row - 1)
+                # Move to the first image even if it doesn't need annotation
+                self.image_list.setCurrentRow(0)
                 current_item = self.image_list.currentItem()
                 if current_item:
                     self.on_image_double_clicked(current_item)
@@ -585,3 +611,24 @@ class FileBrowserWidget(QWidget):
                         break
         except Exception:
             pass  # Silently ignore errors
+
+    def _image_needs_annotation(self, item: QListWidgetItem) -> bool:
+        """Check if an image needs annotation based on its item"""
+        try:
+            if not self.project_manager:
+                return True  # Default to needing annotation if no project manager
+
+            image_path = item.data(Qt.UserRole)
+            if not image_path:
+                return True
+
+            filename = Path(image_path).name
+            image_info = self.project_manager.get_image_info(filename)
+
+            # If image is not in database, it needs annotation by default
+            if not image_info:
+                return True
+
+            return image_info.get("needs_annotation", True)
+        except Exception:
+            return True  # Default to needing annotation on error

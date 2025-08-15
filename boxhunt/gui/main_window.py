@@ -45,8 +45,15 @@ class BoxMakerMainWindow(QMainWindow):
         # Initialize QSettings
         self.settings = QSettings("BoxHunt", "BoxHuntConfig")
 
-        # Load output directory from settings
-        self.output_directory = self.settings.value("output_directory", os.getcwd())
+        # Load last project directory from settings
+        self.last_project_directory = self.settings.value(
+            "last_project_directory", os.getcwd()
+        )
+
+        # Load crop preview visibility from settings
+        self.crop_preview_visible = self.settings.value(
+            "crop_preview_visible", True, type=bool
+        )
 
         # Initialize project manager
         self.project_manager = ProjectManager(self)
@@ -106,6 +113,13 @@ class BoxMakerMainWindow(QMainWindow):
 
         # Set initial sizes to enforce ratio
         top_splitter.setSizes([800, 400, 400])
+
+        # Store reference to top splitter for crop preview visibility control
+        self.top_splitter = top_splitter
+
+        # Apply initial crop preview visibility
+        if not self.crop_preview_visible:
+            self.crop_preview.hide()
 
         top_layout.addWidget(top_splitter)
 
@@ -173,6 +187,16 @@ class BoxMakerMainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # View menu
+        view_menu = menubar.addMenu("View")
+
+        # Show Crop Preview toggle
+        self.show_crop_preview_action = QAction("Show Crop Preview", self)
+        self.show_crop_preview_action.setCheckable(True)
+        self.show_crop_preview_action.setChecked(self.crop_preview_visible)
+        self.show_crop_preview_action.triggered.connect(self.toggle_crop_preview)
+        view_menu.addAction(self.show_crop_preview_action)
+
     def create_toolbar(self):
         """Create toolbar"""
         toolbar = QToolBar()
@@ -206,12 +230,6 @@ class BoxMakerMainWindow(QMainWindow):
         export_action.setToolTip("Export all annotations with progress")
         export_action.triggered.connect(self.export_all_annotations)
         toolbar.addAction(export_action)
-
-        # Set output directory button
-        set_output_dir_action = QAction("Set Output Dir", self)
-        set_output_dir_action.setToolTip("Set output directory for exports")
-        set_output_dir_action.triggered.connect(self.set_output_directory)
-        toolbar.addAction(set_output_dir_action)
 
         toolbar.addSeparator()
 
@@ -281,11 +299,14 @@ class BoxMakerMainWindow(QMainWindow):
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select Project Directory",
-            self.output_directory,
+            self.last_project_directory,
         )
 
         if directory:
             if self.project_manager.create_project(directory):
+                # Save last project directory to settings
+                self.last_project_directory = directory
+                self.settings.setValue("last_project_directory", directory)
                 self.status_bar.showMessage(f"Created project: {directory}")
 
     def open_project(self):
@@ -293,11 +314,14 @@ class BoxMakerMainWindow(QMainWindow):
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select Project Directory",
-            self.output_directory,
+            self.last_project_directory,
         )
 
         if directory:
             if self.project_manager.open_project(directory):
+                # Save last project directory to settings
+                self.last_project_directory = directory
+                self.settings.setValue("last_project_directory", directory)
                 self.status_bar.showMessage(f"Opened project: {directory}")
 
     def close_project(self):
@@ -467,21 +491,6 @@ class BoxMakerMainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to load annotation data: {str(e)}")
 
-    def set_output_directory(self):
-        """Set the output directory for exports"""
-        directory = QFileDialog.getExistingDirectory(
-            self,
-            "Select Output Directory",
-            self.output_directory,
-        )
-
-        if directory:
-            self.output_directory = directory
-            # Save to settings
-            self.settings.setValue("output_directory", self.output_directory)
-            self.status_bar.showMessage(f"Output directory set to: {directory}")
-            logger.info(f"Output directory changed to: {directory}")
-
     def next_image(self):
         """Go to next image"""
         self.file_browser.next_image()
@@ -490,13 +499,26 @@ class BoxMakerMainWindow(QMainWindow):
         """Go to previous image"""
         self.file_browser.previous_image()
 
+    def toggle_crop_preview(self):
+        """Toggle crop preview visibility"""
+        visible = self.show_crop_preview_action.isChecked()
+        self.crop_preview_visible = visible
+
+        if visible:
+            self.crop_preview.show()
+        else:
+            self.crop_preview.hide()
+
+        # Save setting
+        self.settings.setValue("crop_preview_visible", visible)
+
     def rename_images_with_hash(self):
         """Rename images in a directory using color hash and average hash"""
         # Select directory containing images
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select Directory with Images",
-            self.output_directory,
+            self.last_project_directory,
         )
 
         if not directory:

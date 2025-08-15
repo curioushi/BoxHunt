@@ -489,14 +489,14 @@ class Box3DRenderer(QOpenGLWidget):
         """Enable/disable auto rotation"""
         self.auto_rotate = enabled
         if enabled:
-            self.rotate_timer.start(50)  # 50ms = ~20 FPS
+            self.rotate_timer.start(33)  # 33ms = ~30 FPS
         else:
             self.rotate_timer.stop()
 
     def auto_rotate_step(self):
         """Single step of auto rotation"""
         if self.auto_rotate:
-            self.rotation_y += 1.0
+            self.rotation_y += 2.0  # Increased rotation speed
             if self.rotation_y >= 360.0:
                 self.rotation_y -= 360.0
             self.update()
