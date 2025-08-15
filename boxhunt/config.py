@@ -17,6 +17,7 @@ class Config:
 
     # API Keys (set these in your .env file)
     PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
+    REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 
     # Search Keywords
     KEYWORDS_EN = [
@@ -73,5 +74,6 @@ class Config:
         """Check which API keys are available"""
         return {
             "pexels": bool(cls.PEXELS_API_KEY),
+            "replicate": bool(cls.REPLICATE_API_TOKEN),
             "website": True,  # Website scraping doesn't need API key
         }

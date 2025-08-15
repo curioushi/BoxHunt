@@ -161,6 +161,126 @@ def cmd_export(args):
         print("\n❌ Export failed")
 
 
+def cmd_gen(args):
+    """Handle gen command"""
+    import json
+    from datetime import datetime
+    from pathlib import Path
+
+    import replicate
+
+    # Check if Replicate API token is available
+    if not Config.REPLICATE_API_TOKEN:
+        print("❌ Replicate API token not found!")
+        print(
+            "💡 Please set REPLICATE_API_TOKEN in your .env file or environment variables"
+        )
+        print("   Get your token from: https://replicate.com/account/api-tokens")
+        sys.exit(1)
+
+    print(f"🎨 Generating {args.count} images using Replicate AI...")
+
+    # Create output directory with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path("data") / f"replicate_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prepare the prompt
+    prompt = """A high-quality product photo showing exactly four fully closed packaging boxes arranged in a 2x2 grid layout, positioned in the top-left, top-right, bottom-left, and bottom-right areas of the image.
+Each box is shown in a balanced three-quarter perspective with a moderate viewing angle, so the front, side, and top surfaces are all clearly visible and proportionally displayed.
+Boxes are made of corrugated paper, with colorful CMYK-printed graphics, brand logos, and detailed product designs, featuring vibrant colors, bold typography, illustrated patterns, photographic imagery, and product information panels"""
+
+    # Generation parameters
+    generation_params = {
+        "prompt": prompt,
+        "go_fast": False,
+        "megapixels": "1",
+        "num_outputs": 1,
+        "aspect_ratio": "1:1",
+        "output_format": "jpg",
+        "output_quality": 95,
+        "num_inference_steps": 4,
+    }
+
+    try:
+        print("🚀 Starting image generation...")
+
+        # Calculate how many requests we need
+        max_outputs_per_request = 4
+        total_requests = (
+            args.count + max_outputs_per_request - 1
+        ) // max_outputs_per_request
+
+        saved_images = []
+        image_counter = 1
+
+        for request_num in range(total_requests):
+            # Calculate how many images to generate in this request
+            images_in_this_request = min(
+                max_outputs_per_request,
+                args.count - request_num * max_outputs_per_request,
+            )
+
+            print(
+                f"📦 Request {request_num + 1}/{total_requests}: Generating {images_in_this_request} images..."
+            )
+
+            # Update generation parameters for this request
+            request_params = generation_params.copy()
+            request_params["num_outputs"] = images_in_this_request
+
+            output = replicate.run(
+                "black-forest-labs/flux-schnell", input=request_params
+            )
+
+            # Save images from this request
+            for image in output:
+                # Generate filename
+                filename = f"generated_box_{image_counter:03d}.jpg"
+                filepath = output_dir / filename
+
+                # Download and save image
+                with open(filepath, "wb") as f:
+                    f.write(image.read())
+
+                saved_images.append(
+                    {
+                        "filename": filename,
+                        "url": image.url,
+                        "index": image_counter,
+                        "request_number": request_num + 1,
+                    }
+                )
+
+                print(f"✅ Saved: {filename}")
+                image_counter += 1
+
+        # Save metadata
+        metadata = {
+            "generation_timestamp": timestamp,
+            "generation_params": generation_params,
+            "total_images": len(saved_images),
+            "total_requests": total_requests,
+            "max_outputs_per_request": max_outputs_per_request,
+            "output_directory": str(output_dir),
+            "images": saved_images,
+        }
+
+        metadata_file = output_dir / "generation_metadata.json"
+        with open(metadata_file, "w", encoding="utf-8") as metadata_f:
+            json.dump(metadata, metadata_f, indent=2, ensure_ascii=False)
+
+        print("\n🎉 Generation completed successfully!")
+        print(f"📁 Output directory: {output_dir}")
+        print(f"📊 Generated {len(saved_images)} images")
+        print(f"📄 Metadata saved to: {metadata_file}")
+
+    except Exception as e:
+        print(f"❌ Generation failed: {e}")
+        logging.error(f"Image generation failed: {e}")
+        sys.exit(1)
+
+
 def cmd_gui(args):
     """Handle GUI command"""
     try:
@@ -392,6 +512,15 @@ def create_parser():
     # GUI command
     subparsers.add_parser("gui", help="Launch the 3D box creation GUI")
 
+    # Gen command
+    gen_parser = subparsers.add_parser("gen", help="Generate images using Replicate AI")
+    gen_parser.add_argument(
+        "--count",
+        type=int,
+        default=3,
+        help="Number of images to generate (default: 3)",
+    )
+
     return parser
 
 
@@ -429,6 +558,8 @@ def main():
                 cmd_config(args)
             elif args.command == "gui":
                 cmd_gui(args)
+            elif args.command == "gen":
+                cmd_gen(args)
             else:
                 print(f"Unknown command: {args.command}")
                 parser.print_help()
@@ -456,6 +587,8 @@ def main():
                 cmd_config(args)
             elif args.command == "gui":
                 cmd_gui(args)
+            elif args.command == "gen":
+                cmd_gen(args)
         except Exception as e:
             logging.error(f"Unexpected error: {e}")
             print(f"\n❌ Error: {e}")
