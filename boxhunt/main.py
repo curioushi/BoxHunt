@@ -6,6 +6,9 @@ import argparse
 import asyncio
 import logging
 import sys
+from pathlib import Path
+
+from PIL import Image
 
 from .config import Config
 from .crawler import BoxHuntCrawler
@@ -521,7 +524,228 @@ def create_parser():
         help="Number of images to generate (default: 3)",
     )
 
+    # Utils command
+    utils_parser = subparsers.add_parser("utils", help="Utility functions")
+    utils_subparsers = utils_parser.add_subparsers(
+        dest="utils_command", help="Available utility functions"
+    )
+
+    # Crop2x2 command
+    crop2x2_parser = utils_subparsers.add_parser(
+        "crop2x2", help="Crop images into 2x2 layout"
+    )
+    crop2x2_parser.add_argument(
+        "--input-dir",
+        type=str,
+        required=True,
+        help="Input directory containing images",
+    )
+    crop2x2_parser.add_argument(
+        "--output-dir",
+        type=str,
+        required=True,
+        help="Output directory for cropped images",
+    )
+
+    # Sample command
+    sample_parser = utils_subparsers.add_parser(
+        "sample", help="Sample N images from input directory to output directory"
+    )
+    sample_parser.add_argument(
+        "--input-dir",
+        type=str,
+        required=True,
+        help="Input directory containing images",
+    )
+    sample_parser.add_argument(
+        "--output-dir",
+        type=str,
+        required=True,
+        help="Output directory for sampled images",
+    )
+    sample_parser.add_argument(
+        "--count",
+        type=int,
+        required=True,
+        help="Number of images to sample",
+    )
+
     return parser
+
+
+def cmd_utils_crop2x2(args):
+    """Handle utils crop2x2 command"""
+    input_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir)
+
+    # Check if input directory exists
+    if not input_dir.exists():
+        print(f"❌ Input directory does not exist: {input_dir}")
+        sys.exit(1)
+
+    # Create output directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Supported image extensions
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+
+    # Get all image files from input directory
+    image_files = []
+    for ext in image_extensions:
+        image_files.extend(input_dir.glob(f"*{ext}"))
+        image_files.extend(input_dir.glob(f"*{ext.upper()}"))
+
+    if not image_files:
+        print(f"❌ No image files found in: {input_dir}")
+        sys.exit(1)
+
+    print(f"📁 Found {len(image_files)} image files")
+    print(f"📁 Output directory: {output_dir}")
+
+    processed_count = 0
+
+    for image_file in image_files:
+        try:
+            # Open image
+            with Image.open(image_file) as img:
+                # Convert to RGB if necessary
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                width, height = img.size
+
+                # Calculate crop dimensions for 2x2 layout
+                crop_width = width // 2
+                crop_height = height // 2
+
+                # Define crop regions (top-left, top-right, bottom-left, bottom-right)
+                crops = [
+                    (0, 0, crop_width, crop_height),  # Top-left
+                    (crop_width, 0, width, crop_height),  # Top-right
+                    (0, crop_height, crop_width, height),  # Bottom-left
+                    (crop_width, crop_height, width, height),  # Bottom-right
+                ]
+
+                # Get base filename without extension
+                base_name = image_file.stem
+                extension = ".jpg"
+
+                # Crop and save each region
+                for i, (left, top, right, bottom) in enumerate(crops):
+                    # Crop the image
+                    cropped = img.crop((left, top, right, bottom))
+
+                    # Create output filename with suffix
+                    output_filename = f"{base_name}_{i}{extension}"
+                    output_path = output_dir / output_filename
+
+                    # Save with JPEG quality 100
+                    cropped.save(output_path, "JPEG", quality=100, optimize=False)
+
+                processed_count += 1
+                print(f"✓ Processed: {image_file.name} -> 4 cropped images")
+
+        except Exception as e:
+            print(f"❌ Error processing {image_file.name}: {e}")
+            continue
+
+    print("\n✅ Crop2x2 completed!")
+    print(f"   Processed: {processed_count} images")
+    print(f"   Output: {processed_count * 4} cropped images")
+    print(f"   Location: {output_dir}")
+
+
+def cmd_utils_sample(args):
+    """Handle sample utility command"""
+    import shutil
+    from glob import glob
+    from pathlib import Path
+    from random import sample
+
+    from tqdm import tqdm
+
+    input_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir)
+    count = args.count
+
+    # Check if input directory exists
+    if not input_dir.exists():
+        print(f"❌ Input directory does not exist: {input_dir}")
+        return
+
+    # Create output directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Get all image files from input directory
+    image_extensions = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff", "*.tif"]
+    files = []
+    for ext in image_extensions:
+        files.extend(glob(str(input_dir / ext)))
+        files.extend(glob(str(input_dir / ext.upper())))
+
+    if not files:
+        print(f"❌ No image files found in: {input_dir}")
+        return
+
+    # Sort files for consistent sampling
+    files = sorted(files)
+    total_files = len(files)
+
+    print(f"📁 Found {total_files} images in {input_dir}")
+
+    # Check if requested count is valid
+    if count > total_files:
+        print(f"⚠️  Requested {count} images but only {total_files} available")
+        count = total_files
+
+    # Sample files
+    sampled_files = sample(files, count)
+    print(f"🎯 Sampling {count} images...")
+
+    # Move files with progress bar
+    moved_count = 0
+    for file_path in tqdm(sampled_files, desc="Moving files"):
+        try:
+            source_path = Path(file_path)
+            dest_path = output_dir / source_path.name
+
+            # Handle filename conflicts
+            counter = 1
+            while dest_path.exists():
+                name_parts = source_path.stem, f"_{counter}", source_path.suffix
+                dest_path = output_dir / "".join(name_parts)
+                counter += 1
+
+            shutil.move(str(source_path), str(dest_path))
+            moved_count += 1
+        except Exception as e:
+            print(f"❌ Error moving {file_path}: {e}")
+            continue
+
+    print("\n✅ Sample completed!")
+    print(f"   Sampled: {moved_count} images")
+    print(f"   From: {input_dir}")
+    print(f"   To: {output_dir}")
+
+
+def cmd_utils(args):
+    """Handle utils command"""
+    if not args.utils_command:
+        print("❌ Please specify a utility function")
+        print("Available utilities:")
+        print("  crop2x2 - Crop images into 2x2 layout")
+        print("  sample - Sample N images from input directory to output directory")
+        return
+
+    if args.utils_command == "crop2x2":
+        cmd_utils_crop2x2(args)
+    elif args.utils_command == "sample":
+        cmd_utils_sample(args)
+    else:
+        print(f"❌ Unknown utility: {args.utils_command}")
+        print("Available utilities:")
+        print("  crop2x2 - Crop images into 2x2 layout")
+        print("  sample - Sample N images from input directory to output directory")
 
 
 def main():
@@ -560,6 +784,8 @@ def main():
                 cmd_gui(args)
             elif args.command == "gen":
                 cmd_gen(args)
+            elif args.command == "utils":
+                cmd_utils(args)
             else:
                 print(f"Unknown command: {args.command}")
                 parser.print_help()
@@ -589,6 +815,8 @@ def main():
                 cmd_gui(args)
             elif args.command == "gen":
                 cmd_gen(args)
+            elif args.command == "utils":
+                cmd_utils(args)
         except Exception as e:
             logging.error(f"Unexpected error: {e}")
             print(f"\n❌ Error: {e}")
