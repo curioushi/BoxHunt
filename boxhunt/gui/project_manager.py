@@ -286,9 +286,19 @@ class ProjectManager(QObject):
             cursor.execute("SELECT COUNT(*) FROM annotations")
             total_images = cursor.fetchone()[0]
 
-            # Annotated images
-            cursor.execute("SELECT COUNT(*) FROM annotations WHERE is_annotated = 1")
+            # Annotated images (including those with needs_annotation = 0)
+            cursor.execute("""
+                SELECT COUNT(*) FROM annotations
+                WHERE is_annotated = 1 OR needs_annotation = 0
+            """)
             annotated_images = cursor.fetchone()[0]
+
+            # Images with actual annotation results
+            cursor.execute("""
+                SELECT COUNT(*) FROM annotations
+                WHERE annotation_result != '{}' AND annotation_result != ''
+            """)
+            actual_annotated_images = cursor.fetchone()[0]
 
             # Images needing annotation
             cursor.execute(
@@ -299,6 +309,7 @@ class ProjectManager(QObject):
             return {
                 "total_images": total_images,
                 "annotated_images": annotated_images,
+                "actual_annotated_images": actual_annotated_images,
                 "needs_annotation": needs_annotation,
                 "completion_rate": (annotated_images / total_images * 100)
                 if total_images > 0

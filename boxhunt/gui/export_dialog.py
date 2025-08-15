@@ -213,6 +213,7 @@ class ExportDialog(QDialog):
         self.stats_label = QLabel(
             f"Total: {stats.get('total_images', 0)}, "
             f"Annotated: {stats.get('annotated_images', 0)}, "
+            f"Actual Annotations: {stats.get('actual_annotated_images', 0)}, "
             f"Completion: {stats.get('completion_rate', 0):.1f}%"
         )
         info_layout.addRow("Statistics:", self.stats_label)
@@ -257,6 +258,9 @@ class ExportDialog(QDialog):
         # Buttons
         button_layout = QHBoxLayout()
 
+        self.validate_btn = QPushButton("Validate")
+        self.validate_btn.clicked.connect(self.validate_annotations)
+
         self.export_btn = QPushButton("Export")
         self.export_btn.setDefault(True)
 
@@ -264,6 +268,7 @@ class ExportDialog(QDialog):
         self.cancel_btn.clicked.connect(self.reject)
 
         button_layout.addStretch()
+        button_layout.addWidget(self.validate_btn)
         button_layout.addWidget(self.export_btn)
         button_layout.addWidget(self.cancel_btn)
 
@@ -339,7 +344,6 @@ class ExportDialog(QDialog):
         if success:
             QMessageBox.information(self, "Export Complete", message)
             self.log_text.append("Export completed successfully!")
-            self.accept()
         else:
             QMessageBox.critical(self, "Export Failed", message)
             self.log_text.append(f"Export failed: {message}")
@@ -348,3 +352,140 @@ class ExportDialog(QDialog):
         if self.export_worker:
             self.export_worker.deleteLater()
             self.export_worker = None
+
+    def validate_annotations(self):
+        """Validate all annotation results"""
+        if not self.project_manager.is_project_open():
+            QMessageBox.warning(self, "Warning", "No project is currently open.")
+            return
+
+        # Get all annotations
+        annotations_data = self.project_manager.get_all_annotations()
+        if not annotations_data:
+            QMessageBox.information(
+                self, "No Data", "No annotations found to validate."
+            )
+            return
+
+        self.log_text.append("Starting annotation validation...")
+
+        validation_errors = []
+
+        for item in annotations_data:
+            filename = item["filename"]
+            annotation = item["annotation"]
+
+            errors = self._validate_single_annotation(filename, annotation)
+            if errors:
+                validation_errors.extend(errors)
+
+        # Report results
+        if validation_errors:
+            self.log_text.append(
+                f"\nValidation completed with {len(validation_errors)} errors:"
+            )
+            for error in validation_errors:
+                self.log_text.append(f"  - {error}")
+        else:
+            self.log_text.append(
+                "\nValidation completed successfully! All annotations are valid."
+            )
+
+        self.log_text.append("Validation finished.")
+
+    def _validate_single_annotation(
+        self, filename: str, annotation_data: dict
+    ) -> list[str]:
+        """Validate a single annotation and return list of errors"""
+        errors = []
+
+        # Get annotations list
+        annotations = annotation_data.get("annotations", [])
+        if not annotations:
+            errors.append(f"{filename}: No annotations found")
+            return errors
+
+        # Check for required labels
+        labels = [
+            ann.get("label", "").lower()
+            for ann in annotations
+            if ann.get("type") == "polygon"
+        ]
+
+        # Check for top and front (required)
+        if "top" not in labels:
+            errors.append(f"{filename}: Missing 'top' annotation")
+        if "front" not in labels:
+            errors.append(f"{filename}: Missing 'front' annotation")
+
+        # Check for left or right (at least one required)
+        if "left" not in labels and "right" not in labels:
+            errors.append(
+                f"{filename}: Missing both 'left' and 'right' annotations (need at least one)"
+            )
+
+        # Find top annotation to check p2.y vs p4.y
+        top_annotation = None
+        for ann in annotations:
+            if ann.get("label", "").lower() == "top" and ann.get("type") == "polygon":
+                top_annotation = ann
+                break
+
+        if top_annotation:
+            points = top_annotation.get("points", [])
+            if len(points) == 4:
+                sorted_points_y = sorted(points, key=lambda x: x[1])
+                pa = sorted_points_y[0]
+                pb = sorted_points_y[-1]
+                pa_x = pa[0]
+                pb_x = pb[0]
+
+                # Check pa.x vs pb.x and required side annotation
+                if pa_x < pb_x:
+                    if "right" not in labels:
+                        errors.append(
+                            f"{filename}: pa_x < pb_x but missing 'right' annotation"
+                        )
+                elif pa_x > pb_x:
+                    if "left" not in labels:
+                        errors.append(
+                            f"{filename}: pa_x > pb_x but missing 'left' annotation"
+                        )
+
+        # Check annotation order for front, left/right
+        for label in ["front", "left", "right"]:
+            if label in labels:
+                for ann in annotations:
+                    if (
+                        ann.get("label", "").lower() == label
+                        and ann.get("type") == "polygon"
+                    ):
+                        points = ann.get("points", [])
+                        if len(points) >= 4:
+                            p1, p2, p3, p4 = points[:4]
+
+                            # Check p1.x < p2.x
+                            if p1[1] >= p2[1]:
+                                errors.append(
+                                    f"{filename}: {label} annotation - p1.x >= p2.x (should be <)"
+                                )
+
+                            # Check p4.x < p3.x
+                            if p4[1] >= p3[1]:
+                                errors.append(
+                                    f"{filename}: {label} annotation - p4.x >= p3.x (should be <)"
+                                )
+
+                            # Check p1.y < p4.y
+                            if p1[0] >= p4[0]:
+                                errors.append(
+                                    f"{filename}: {label} annotation - p1.y >= p4.y (should be <)"
+                                )
+
+                            # Check p2.y < p3.y
+                            if p2[0] >= p3[0]:
+                                errors.append(
+                                    f"{filename}: {label} annotation - p2.y >= p3.y (should be <)"
+                                )
+
+        return errors
