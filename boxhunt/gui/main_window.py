@@ -10,6 +10,7 @@ from PIL import Image
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QDialog,
     QFileDialog,
     QMainWindow,
     QMessageBox,
@@ -22,6 +23,11 @@ from PySide6.QtWidgets import (
 )
 
 from .box3d_viewer import Box3DViewerWidget
+from .classification import (
+    ClassificationUrlDialog,
+    check_healthy,
+    classify_single_image,
+)
 from .crop_preview import CropPreviewWidget
 from .export_dialog import ExportDialog
 from .file_browser import FileBrowserWidget
@@ -223,6 +229,15 @@ class BoxMakerMainWindow(QMainWindow):
         toolbar.addAction(submit_action)
 
         toolbar.addSeparator()
+
+        # Classify all images button
+        classify_action = QAction("Classify All", self)
+        classify_action.setShortcut("Ctrl+C")
+        classify_action.setToolTip(
+            "Classify all images with AI and update annotation status"
+        )
+        classify_action.triggered.connect(self.classify_all_images)
+        toolbar.addAction(classify_action)
 
         # Export all annotations button
         export_action = QAction("Export All", self)
@@ -647,4 +662,180 @@ class BoxMakerMainWindow(QMainWindow):
         except Exception as e:
             error_msg = f"Failed to rename images: {str(e)}"
             QMessageBox.critical(self, "Rename Error", error_msg)
+            logger.error(error_msg)
+
+    def classify_all_images(self):
+        """Classify all images in the current project using AI and update annotation status"""
+        # Check if project is open
+        if not self.project_manager.is_project_open():
+            QMessageBox.warning(
+                self,
+                "No Project Open",
+                "Please open a project first before classifying images.",
+            )
+            return
+
+        # Get project directory
+        project_dir = self.project_manager.get_project_path()
+        if not project_dir:
+            QMessageBox.warning(
+                self, "No Project Directory", "Unable to get project directory."
+            )
+            return
+
+        try:
+            # Get classification server URL from settings
+            server_url = self.settings.value(
+                "classification_server_url", "http://localhost:22335"
+            )
+
+            # Check server health
+            if not check_healthy(server_url):
+                # Show URL configuration dialog
+                dialog = ClassificationUrlDialog(
+                    server_url.replace("http://", "").replace("https://", ""), self
+                )
+                if dialog.exec() == QDialog.Accepted:
+                    server_url = dialog.get_url()
+                    # Save new URL to settings
+                    self.settings.setValue("classification_server_url", server_url)
+                    self.settings.sync()
+                else:
+                    return  # User cancelled
+
+                # Check health again with new URL
+                if not check_healthy(server_url):
+                    QMessageBox.critical(
+                        self,
+                        "Server Connection Failed",
+                        f"Unable to connect to classification server at {server_url}\n\nPlease check if the server is running.",
+                    )
+                    return
+
+            # Get all image files from project
+            image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+            image_files = []
+
+            for ext in image_extensions:
+                image_files.extend(Path(project_dir).glob(f"*{ext}"))
+                image_files.extend(Path(project_dir).glob(f"*{ext.upper()}"))
+
+            if not image_files:
+                QMessageBox.warning(
+                    self,
+                    "No Images Found",
+                    f"No image files found in project directory: {project_dir}",
+                )
+                return
+
+            classified_count = 0
+            failed_count = 0
+            needs_annotation_count = 0
+            skip_annotation_count = 0
+
+            # Create progress dialog
+            progress = QProgressDialog(
+                "Classifying images...", "Cancel", 0, len(image_files), self
+            )
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setAutoClose(False)
+            progress.setAutoReset(False)
+
+            for i, image_file in enumerate(image_files):
+                # Update progress
+                progress.setValue(i)
+                progress.setLabelText(f"Classifying: {image_file.name}")
+
+                # Check if user cancelled
+                if progress.wasCanceled():
+                    logger.info("Image classification cancelled by user")
+                    break
+
+                try:
+                    # Classify the image
+                    result = classify_single_image(str(image_file), server_url)
+
+                    if result:
+                        # Get classification result
+                        class_id = result.get("class_id", 0)
+                        confidence = result.get("confidence", 0.0)
+
+                        # Determine annotation status based on class_id
+                        # class_id = 1 means needs annotation
+                        needs_annotation = class_id == 1
+
+                        # Update database
+                        filename = image_file.name
+                        if self.project_manager.set_image_annotation_status(
+                            filename, needs_annotation
+                        ):
+                            classified_count += 1
+                            if needs_annotation:
+                                needs_annotation_count += 1
+                            else:
+                                skip_annotation_count += 1
+
+                            logger.info(
+                                f"Classified {filename}: class_id={class_id}, confidence={confidence:.3f}, needs_annotation={needs_annotation}"
+                            )
+                        else:
+                            failed_count += 1
+                            logger.error(f"Failed to update database for {filename}")
+                    else:
+                        failed_count += 1
+                        logger.error(f"Classification failed for {image_file.name}")
+
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"Failed to classify {image_file.name}: {str(e)}")
+
+            # Close progress dialog
+            progress.setValue(len(image_files))
+            progress.close()
+
+            # Refresh file browser to show updated status
+            if hasattr(self, "file_browser") and self.file_browser:
+                self.file_browser.refresh_annotation_status()
+
+            # Show results
+            if progress.wasCanceled():
+                message = f"Operation cancelled. Classified {classified_count} images"
+                if needs_annotation_count > 0:
+                    message += f"\n{needs_annotation_count} images marked as needing annotation"
+                if skip_annotation_count > 0:
+                    message += (
+                        f"\n{skip_annotation_count} images marked as skip annotation"
+                    )
+                if failed_count > 0:
+                    message += f"\nFailed to classify {failed_count} images"
+
+                QMessageBox.information(self, "Operation Cancelled", message)
+                self.status_bar.showMessage(
+                    f"Cancelled: Classified {classified_count} images in {project_dir}"
+                )
+            elif classified_count > 0:
+                message = f"Successfully classified {classified_count} images"
+                if needs_annotation_count > 0:
+                    message += f"\n{needs_annotation_count} images marked as needing annotation"
+                if skip_annotation_count > 0:
+                    message += (
+                        f"\n{skip_annotation_count} images marked as skip annotation"
+                    )
+                if failed_count > 0:
+                    message += f"\nFailed to classify {failed_count} images"
+
+                QMessageBox.information(self, "Classification Complete", message)
+                self.status_bar.showMessage(
+                    f"Classified {classified_count} images in {project_dir}"
+                )
+            else:
+                message = "No images were classified"
+                if failed_count > 0:
+                    message += f"\nFailed to classify {failed_count} images"
+
+                QMessageBox.warning(self, "Classification Failed", message)
+
+        except Exception as e:
+            error_msg = f"Failed to classify images: {str(e)}"
+            QMessageBox.critical(self, "Classification Error", error_msg)
             logger.error(error_msg)
