@@ -4,8 +4,12 @@ Main entry point for BoxHunt image scraper
 
 import argparse
 import asyncio
+import json
 import logging
+import random
+import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PIL import Image
@@ -570,6 +574,35 @@ def create_parser():
         help="Number of images to sample",
     )
 
+    # Convert to COCO command
+    convert_coco_parser = utils_subparsers.add_parser(
+        "convert_to_coco", help="Convert dataset to COCO format"
+    )
+    convert_coco_parser.add_argument(
+        "--image-dir",
+        type=str,
+        required=True,
+        help="Directory containing images",
+    )
+    convert_coco_parser.add_argument(
+        "--anno-file",
+        type=str,
+        required=True,
+        help="Annotation file in JSON format",
+    )
+    convert_coco_parser.add_argument(
+        "--output-dir",
+        type=str,
+        required=True,
+        help="Output directory for COCO format dataset",
+    )
+    convert_coco_parser.add_argument(
+        "--val-ratio",
+        type=float,
+        default=0.2,
+        help="Validation set ratio (default: 0.2)",
+    )
+
     return parser
 
 
@@ -728,6 +761,241 @@ def cmd_utils_sample(args):
     print(f"   To: {output_dir}")
 
 
+def cmd_utils_convert_to_coco(args):
+    """Handle convert_to_coco utility command"""
+    from tqdm import tqdm
+
+    image_dir = Path(args.image_dir)
+    anno_file = Path(args.anno_file)
+    output_dir = Path(args.output_dir)
+    val_ratio = args.val_ratio
+
+    # Check if input files exist
+    if not image_dir.exists():
+        print(f"❌ Image directory does not exist: {image_dir}")
+        return
+
+    if not anno_file.exists():
+        print(f"❌ Annotation file does not exist: {anno_file}")
+        return
+
+    # Create output directory structure
+    output_dir.mkdir(parents=True, exist_ok=True)
+    images_dir = output_dir / "images"
+    annotations_dir = output_dir / "annotations"
+    images_dir.mkdir(exist_ok=True)
+    annotations_dir.mkdir(exist_ok=True)
+
+    print(f"📁 Loading annotations from: {anno_file}")
+
+    # Load annotation file
+    try:
+        with open(anno_file, encoding="utf-8") as f:
+            annotations_data = json.load(f)
+    except Exception as e:
+        print(f"❌ Error loading annotation file: {e}")
+        return
+
+    if not isinstance(annotations_data, list):
+        print("❌ Annotation file should contain a list of dictionaries")
+        return
+
+    print(f"📊 Found {len(annotations_data)} annotation entries")
+
+    # Get all image files
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
+    image_files = []
+    for ext in image_extensions:
+        image_files.extend(image_dir.glob(f"*{ext}"))
+        image_files.extend(image_dir.glob(f"*{ext.upper()}"))
+
+    # Create filename to path mapping
+    image_paths = {f.name: f for f in image_files}
+    print(f"📁 Found {len(image_paths)} image files")
+
+    # Collect all unique labels
+    all_labels = set()
+    for item in annotations_data:
+        if "annotation" in item and "annotations" in item["annotation"]:
+            for anno in item["annotation"]["annotations"]:
+                if "label" in anno:
+                    all_labels.add(anno["label"])
+
+    labels_list = sorted(all_labels)
+    print(f"🏷️  Found {len(labels_list)} unique labels: {', '.join(labels_list)}")
+
+    # Create category mapping
+    categories = []
+    for i, label in enumerate(labels_list, 1):
+        categories.append({"id": i, "name": label, "supercategory": "object"})
+
+    # Process annotations and create COCO format
+    annotation_id = 1
+
+    # Filter valid annotations
+    valid_annotations = []
+    for item in annotations_data:
+        if "filename" in item and "annotation" in item:
+            filename = item["filename"]
+            if filename in image_paths:
+                valid_annotations.append(item)
+
+    print(f"📊 Processing {len(valid_annotations)} valid annotations...")
+
+    # Split into train/val
+    random.shuffle(valid_annotations)
+    val_count = int(len(valid_annotations) * val_ratio)
+    train_annotations = valid_annotations[val_count:]
+    val_annotations = valid_annotations[:val_count]
+
+    print(f"📊 Train set: {len(train_annotations)} images")
+    print(f"📊 Validation set: {len(val_annotations)} images")
+
+    # Process train set
+    train_images, train_annos = process_annotations_for_coco(
+        train_annotations, image_paths, categories, annotation_id
+    )
+    annotation_id += len(train_annos)
+
+    # Process validation set
+    val_images, val_annos = process_annotations_for_coco(
+        val_annotations, image_paths, categories, annotation_id
+    )
+
+    # Copy images to output directory
+    print("📁 Copying images...")
+    all_images = train_images + val_images
+    for img_info in tqdm(all_images, desc="Copying images"):
+        source_path = image_paths[img_info["file_name"]]
+        dest_path = images_dir / img_info["file_name"]
+        shutil.copy2(source_path, dest_path)
+
+    # Create COCO format JSON files
+    train_coco = {
+        "info": {
+            "year": datetime.now().year,
+            "version": "1.0",
+            "description": "Converted to COCO format",
+            "contributor": "BoxHunt",
+            "url": "",
+            "date_created": datetime.now().isoformat(),
+        },
+        "licenses": [{"id": 1, "name": "Unknown", "url": ""}],
+        "categories": categories,
+        "images": train_images,
+        "annotations": train_annos,
+    }
+
+    val_coco = {
+        "info": {
+            "year": datetime.now().year,
+            "version": "1.0",
+            "description": "Converted to COCO format",
+            "contributor": "BoxHunt",
+            "url": "",
+            "date_created": datetime.now().isoformat(),
+        },
+        "licenses": [{"id": 1, "name": "Unknown", "url": ""}],
+        "categories": categories,
+        "images": val_images,
+        "annotations": val_annos,
+    }
+
+    # Save JSON files
+    train_json_path = annotations_dir / "train_labels.json"
+    val_json_path = annotations_dir / "val_labels.json"
+
+    with open(train_json_path, "w", encoding="utf-8") as f:
+        json.dump(train_coco, f, indent=2, ensure_ascii=False)
+
+    with open(val_json_path, "w", encoding="utf-8") as f:
+        json.dump(val_coco, f, indent=2, ensure_ascii=False)
+
+    print("\n✅ COCO format conversion completed!")
+    print(f"   Output directory: {output_dir}")
+    print(f"   Train images: {len(train_images)}")
+    print(f"   Train annotations: {len(train_annos)}")
+    print(f"   Validation images: {len(val_images)}")
+    print(f"   Validation annotations: {len(val_annos)}")
+    print(f"   Categories: {len(categories)}")
+    print(f"   Train JSON: {train_json_path}")
+    print(f"   Validation JSON: {val_json_path}")
+
+
+def process_annotations_for_coco(
+    annotations_data, image_paths, categories, start_annotation_id
+):
+    """Process annotations and convert to COCO format"""
+    coco_images = []
+    coco_annotations = []
+    annotation_id = start_annotation_id
+
+    # Create label to category id mapping
+    label_to_id = {cat["name"]: cat["id"] for cat in categories}
+
+    for item in annotations_data:
+        filename = item["filename"]
+        image_path = image_paths[filename]
+
+        # Get image dimensions
+        try:
+            with Image.open(image_path) as img:
+                width, height = img.size
+        except Exception as e:
+            print(f"⚠️  Warning: Could not get dimensions for {filename}: {e}")
+            continue
+
+        # Create image entry
+        image_id = len(coco_images) + 1
+        coco_images.append(
+            {
+                "id": image_id,
+                "width": width,
+                "height": height,
+                "file_name": filename,
+                "license": 1,
+                "date_captured": None,
+            }
+        )
+
+        # Process annotations
+        if "annotation" in item and "annotations" in item["annotation"]:
+            for anno in item["annotation"]["annotations"]:
+                if "label" in anno and "points" in anno and anno["type"] == "polygon":
+                    label = anno["label"]
+                    points = anno["points"]
+
+                    if label in label_to_id and len(points) >= 3:
+                        # Calculate bounding box from polygon
+                        x_coords = [p[0] for p in points]
+                        y_coords = [p[1] for p in points]
+
+                        x_min, x_max = min(x_coords), max(x_coords)
+                        y_min, y_max = min(y_coords), max(y_coords)
+
+                        bbox = [x_min, y_min, x_max - x_min, y_max - y_min]
+
+                        # Calculate area
+                        area = (x_max - x_min) * (y_max - y_min)
+
+                        # Create annotation entry
+                        coco_annotations.append(
+                            {
+                                "id": annotation_id,
+                                "image_id": image_id,
+                                "category_id": label_to_id[label],
+                                "segmentation": points,
+                                "area": area,
+                                "bbox": bbox,
+                                "iscrowd": 0,
+                            }
+                        )
+
+                        annotation_id += 1
+
+    return coco_images, coco_annotations
+
+
 def cmd_utils(args):
     """Handle utils command"""
     if not args.utils_command:
@@ -735,17 +1003,21 @@ def cmd_utils(args):
         print("Available utilities:")
         print("  crop2x2 - Crop images into 2x2 layout")
         print("  sample - Sample N images from input directory to output directory")
+        print("  convert_to_coco - Convert dataset to COCO format")
         return
 
     if args.utils_command == "crop2x2":
         cmd_utils_crop2x2(args)
     elif args.utils_command == "sample":
         cmd_utils_sample(args)
+    elif args.utils_command == "convert_to_coco":
+        cmd_utils_convert_to_coco(args)
     else:
         print(f"❌ Unknown utility: {args.utils_command}")
         print("Available utilities:")
         print("  crop2x2 - Crop images into 2x2 layout")
         print("  sample - Sample N images from input directory to output directory")
+        print("  convert_to_coco - Convert dataset to COCO format")
 
 
 def main():
