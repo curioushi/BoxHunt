@@ -826,11 +826,11 @@ def cmd_utils_convert_to_coco(args):
 
     # Create category mapping
     categories = []
-    for i, label in enumerate(labels_list, 1):
+    for i, label in enumerate(labels_list, 0):
         categories.append({"id": i, "name": label, "supercategory": "object"})
 
     # Process annotations and create COCO format
-    annotation_id = 1
+    annotation_id = 0
 
     # Filter valid annotations
     valid_annotations = []
@@ -946,7 +946,7 @@ def process_annotations_for_coco(
             continue
 
         # Create image entry
-        image_id = len(coco_images) + 1
+        image_id = len(coco_images)
         coco_images.append(
             {
                 "id": image_id,
@@ -985,6 +985,7 @@ def process_annotations_for_coco(
                                 "image_id": image_id,
                                 "category_id": label_to_id[label],
                                 "segmentation": points,
+                                "coords2d": points,
                                 "area": area,
                                 "bbox": bbox,
                                 "iscrowd": 0,

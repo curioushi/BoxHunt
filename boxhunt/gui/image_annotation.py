@@ -142,6 +142,41 @@ class VGGTUrlDialog(QDialog):
         return url
 
 
+class DetectUrlDialog(QDialog):
+    """Dialog for configuring Detect server URL"""
+
+    def __init__(self, default_url="localhost:22336", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Detect Server Configuration")
+        self.setModal(True)
+        self.setFixedSize(400, 150)
+
+        # Create layout
+        layout = QFormLayout()
+
+        # URL input
+        self.url_edit = QLineEdit(default_url)
+        self.url_edit.setPlaceholderText(
+            "Enter Detect server URL (e.g., localhost:22336)"
+        )
+        layout.addRow("Server URL:", self.url_edit)
+
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addRow(button_box)
+
+        self.setLayout(layout)
+
+    def get_url(self) -> str:
+        """Get the entered URL"""
+        url = self.url_edit.text().strip()
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "http://" + url
+        return url
+
+
 class ImageCanvas(QLabel):
     """Canvas for displaying image and annotations"""
 
@@ -900,9 +935,10 @@ class ImageAnnotationWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # Initialize QSettings for VGGT URL
+        # Initialize QSettings for VGGT URL and Detect URL
         self.settings = QSettings("BoxHunt", "BoxHuntConfig")
         self.vggt_url = self.settings.value("vggt_url", "http://localhost:22334")
+        self.detect_url = self.settings.value("detect_url", "http://localhost:22336")
 
         self.setup_ui()
 
@@ -920,6 +956,12 @@ class ImageAnnotationWidget(QWidget):
         clear_btn.clicked.connect(self.clear_annotations)
         toolbar.addWidget(clear_btn)
 
+        # Detect button
+        detect_btn = QPushButton("Detect")
+        detect_btn.setToolTip("Send image to inference server for quad detection (C)")
+        detect_btn.clicked.connect(self.detect_inference)
+        toolbar.addWidget(detect_btn)
+
         # VGGT button
         vggt_btn = QPushButton("VGGT")
         vggt_btn.setToolTip("Send image to VGGT server for 3D reconstruction (V)")
@@ -931,7 +973,7 @@ class ImageAnnotationWidget(QWidget):
         # Instructions label
         instructions = QLabel(
             "Click 4 points to create polygon. Right-click to set label/undo. "
-            "Shift+click to drag corners. Quick labels: W=top, S=front, A=left, D=right. V=VGGT"
+            "Shift+click to drag corners. Quick labels: W=top, S=front, A=left, D=right. C=Detect, V=VGGT"
         )
         instructions.setStyleSheet("color: #666; font-size: 11px;")
         toolbar.addWidget(instructions)
@@ -1107,6 +1149,178 @@ class ImageAnnotationWidget(QWidget):
             # Close progress dialog
             progress.close()
 
+    def detect_inference(self):
+        """Send current image to Detect server for quad detection"""
+        if not self.canvas.original_pixmap:
+            self.status_message.emit("No image loaded")
+            return
+
+        # Create progress dialog
+        progress = QProgressDialog(
+            "Processing with Detect inference server...", None, 0, 100, self
+        )
+        progress.setWindowTitle("Quad Detection")
+        progress.setModal(True)
+        progress.setAutoClose(True)
+        progress.setMinimumDuration(0)  # Show immediately
+
+        # Remove close button from title bar
+        progress.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+
+        # Set dialog size and style
+        progress.setMinimumWidth(400)
+        progress.setMinimumHeight(100)
+        progress.setLabelText("Sending image to quad detection server...")
+        progress.setValue(10)  # Start with some progress
+
+        progress.show()
+
+        try:
+            self.status_message.emit("Sending to Detect server...")
+
+            # Convert QPixmap to PIL Image using QBuffer
+            qbuffer = QBuffer()
+            qbuffer.open(QBuffer.ReadWrite)
+            self.canvas.original_pixmap.save(qbuffer, "PNG")
+            qbuffer.seek(0)
+            pil_image = Image.open(io.BytesIO(qbuffer.data()))
+
+            # Convert to JPEG bytes
+            jpeg_buffer = io.BytesIO()
+            pil_image.save(jpeg_buffer, "JPEG")
+            jpeg_buffer.seek(0)
+
+            # Encode to base64
+            image_b64 = base64.b64encode(jpeg_buffer.getvalue()).decode("utf-8")
+
+            # Prepare request
+            request_data = {
+                "image": image_b64,
+                "image_format": "jpeg",
+                "confidence_threshold": 0.6,
+            }
+
+            # Send request
+            logger.info("Sending request to Detect inference server...")
+            progress.setLabelText("Sending request to Detect server...")
+            progress.setValue(30)
+
+            start_time = time.time()
+
+            # Send request with current URL
+            try:
+                # Extract base URL from saved URL
+                base_url = self.detect_url.replace("/inference", "")
+                if base_url.endswith("/"):
+                    base_url = base_url[:-1]
+
+                response = requests.post(
+                    f"{base_url}/inference", json=request_data, timeout=30
+                )
+            except requests.exceptions.RequestException:
+                # Request failed, show URL configuration dialog
+                self._show_detect_url_config_dialog()
+                # Try again with new URL
+                base_url = self.detect_url.replace("/inference", "")
+                if base_url.endswith("/"):
+                    base_url = base_url[:-1]
+                response = requests.post(
+                    f"{base_url}/inference", json=request_data, timeout=30
+                )
+
+            end_time = time.time()
+            logger.info(
+                f"Detect inference completed, cost {end_time - start_time} seconds"
+            )
+
+            progress.setLabelText("Processing detection results...")
+            progress.setValue(70)
+
+            if response.status_code == 200:
+                result = response.json()
+                if result["status"] == "success":
+                    data = result["data"]
+
+                    # Clear existing annotations and add new detections
+                    progress.setLabelText("Clearing existing annotations...")
+                    progress.setValue(85)
+
+                    # Clear all existing annotations
+                    self.canvas.annotations.clear()
+                    self.canvas.selected_annotation = None
+                    self.canvas.current_annotation = None
+
+                    progress.setLabelText("Adding detections to annotations...")
+                    progress.setValue(90)
+
+                    self._process_detections(data["detections"])
+
+                    progress.setLabelText("Detection processing completed!")
+                    progress.setValue(100)
+                    self.status_message.emit(
+                        f"Detection completed: {data['total_detections']} quads found"
+                    )
+                else:
+                    self.status_message.emit(f"Detect error: {result['message']}")
+            else:
+                # Request failed, show URL configuration dialog
+                self._show_detect_url_config_dialog()
+                self.status_message.emit(
+                    f"Detect request failed: {response.status_code}"
+                )
+
+        except Exception as e:
+            self.status_message.emit(f"Detect error: {str(e)}")
+            logger.error(f"Detect error: {e}")
+        finally:
+            # Close progress dialog
+            progress.close()
+
+    def _process_detections(self, detections: list):
+        """Process detection results and add to annotations"""
+        try:
+            # Label mapping from detection server to annotation labels
+            label_mapping = {
+                0: "front",  # front
+                1: "left",  # left
+                2: "right",  # right
+                3: "top",  # top
+            }
+
+            added_count = 0
+            for detection in detections:
+                label_id = detection["label"]
+                confidence = detection["confidence"]
+                quad = detection["quad"]
+
+                # Map label ID to annotation label
+                annotation_label = label_mapping.get(label_id, "front")
+
+                # Convert quad coordinates to points format
+                points = [(int(point[0]), int(point[1])) for point in quad]
+
+                # Create annotation polygon
+                annotation = AnnotationPolygon(points, annotation_label)
+
+                # Add to canvas annotations
+                self.canvas.annotations.append(annotation)
+                added_count += 1
+
+                logger.info(
+                    f"Added detection: {annotation_label} (confidence: {confidence:.3f})"
+                )
+
+            # Update canvas and emit change signal
+            self.canvas.update()
+            # Emit annotations_changed signal with dictionary format for crop_preview
+            self.annotations_changed.emit(self.canvas.get_annotations())
+
+            logger.info(f"Added {added_count} detections to annotations")
+
+        except Exception as e:
+            logger.error(f"Error processing detections: {e}")
+            self.status_message.emit(f"Error processing detections: {str(e)}")
+
     def _decode_base64_image(self, image_b64: str) -> Image.Image:
         """Decode base64 image data"""
         image_bytes = base64.b64decode(image_b64)
@@ -1176,6 +1390,28 @@ class ImageAnnotationWidget(QWidget):
         except Exception as e:
             logger.error(f"Error showing URL config dialog: {e}")
             self.status_message.emit(f"Error configuring VGGT URL: {str(e)}")
+
+    def _show_detect_url_config_dialog(self):
+        """Show URL configuration dialog when Detect request fails"""
+        try:
+            # Extract base URL for display
+            display_url = self.detect_url.replace("http://", "").replace("https://", "")
+            if display_url.endswith("/inference"):
+                display_url = display_url[:-10]
+
+            dialog = DetectUrlDialog(display_url, self)
+            if dialog.exec() == QDialog.Accepted:
+                new_url = dialog.get_url()
+                if new_url != self.detect_url:
+                    self.detect_url = new_url
+                    # Save to QSettings
+                    self.settings.setValue("detect_url", new_url)
+                    self.settings.sync()
+                    logger.info(f"Detect URL updated to: {new_url}")
+                    self.status_message.emit(f"Detect URL updated to: {new_url}")
+        except Exception as e:
+            logger.error(f"Error showing Detect URL config dialog: {e}")
+            self.status_message.emit(f"Error configuring Detect URL: {str(e)}")
 
     def _estimate_box_dimensions(self, world_points, world_points_conf, intrinsic):
         """Estimate box dimensions from polygon annotations using 3D point cloud"""
@@ -1436,5 +1672,9 @@ class ImageAnnotationWidget(QWidget):
             if key_event.key() == Qt.Key_V:
                 # V key triggers VGGT inference
                 self.vggt_inference()
+                return True  # Event handled
+            elif key_event.key() == Qt.Key_C:
+                # C key triggers Detect inference
+                self.detect_inference()
                 return True  # Event handled
         return super().eventFilter(source, event)

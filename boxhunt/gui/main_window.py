@@ -762,7 +762,7 @@ class BoxMakerMainWindow(QMainWindow):
 
                         # Determine annotation status based on class_id
                         # class_id = 1 means needs annotation
-                        needs_annotation = class_id == 1
+                        needs_annotation = (class_id == 1) or (confidence < 0.9)
 
                         # Update database
                         filename = image_file.name
