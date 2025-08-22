@@ -1276,6 +1276,57 @@ class ImageAnnotationWidget(QWidget):
             # Close progress dialog
             progress.close()
 
+    def _fix_points_order(
+        self, points: list[tuple[int, int]], label: str
+    ) -> list[tuple[int, int]]:
+        """Fix points order based on label"""
+        order = None
+        if label in ["front", "left", "right"]:
+            xs, ys = [p[0] for p in points], [p[1] for p in points]
+            sorted_idx_x = np.argsort(xs)
+            if ys[sorted_idx_x[0]] < ys[sorted_idx_x[1]]:
+                left_top_idx = sorted_idx_x[0]
+                left_bottom_idx = sorted_idx_x[1]
+            else:
+                left_top_idx = sorted_idx_x[1]
+                left_bottom_idx = sorted_idx_x[0]
+            if ys[sorted_idx_x[2]] < ys[sorted_idx_x[3]]:
+                right_top_idx = sorted_idx_x[2]
+                right_bottom_idx = sorted_idx_x[3]
+            else:
+                right_top_idx = sorted_idx_x[3]
+                right_bottom_idx = sorted_idx_x[2]
+            order = [left_top_idx, left_bottom_idx, right_bottom_idx, right_top_idx]
+        elif label == "top":
+            xs, ys = [p[0] for p in points], [p[1] for p in points]
+            sorted_idx_x = np.argsort(xs)
+            sorted_idx_y = np.argsort(ys)
+            if xs[sorted_idx_y[0]] < xs[sorted_idx_y[3]]:
+                p0_idx = sorted_idx_y[0]
+                p2_idx = sorted_idx_y[3]
+                if xs[sorted_idx_y[1]] < xs[sorted_idx_y[2]]:
+                    p1_idx = sorted_idx_y[1]
+                    p3_idx = sorted_idx_y[2]
+                else:
+                    p1_idx = sorted_idx_y[2]
+                    p3_idx = sorted_idx_y[1]
+                order = [p0_idx, p1_idx, p2_idx, p3_idx]
+            else:
+                p1_idx = sorted_idx_y[3]
+                p3_idx = sorted_idx_y[0]
+                if xs[sorted_idx_y[1]] < xs[sorted_idx_y[2]]:
+                    p0_idx = sorted_idx_y[1]
+                    p2_idx = sorted_idx_y[2]
+                else:
+                    p0_idx = sorted_idx_y[2]
+                    p2_idx = sorted_idx_y[1]
+                order = [p0_idx, p1_idx, p2_idx, p3_idx]
+        else:
+            raise ValueError(f"Invalid label: {label}")
+
+        points = [points[i] for i in order]
+        return points
+
     def _process_detections(self, detections: list):
         """Process detection results and add to annotations"""
         try:
@@ -1297,7 +1348,9 @@ class ImageAnnotationWidget(QWidget):
                 annotation_label = label_mapping.get(label_id, "front")
 
                 # Convert quad coordinates to points format
-                points = [(int(point[0]), int(point[1])) for point in quad]
+                points = [(round(point[0]), round(point[1])) for point in quad]
+
+                points = self._fix_points_order(points, annotation_label)
 
                 # Create annotation polygon
                 annotation = AnnotationPolygon(points, annotation_label)

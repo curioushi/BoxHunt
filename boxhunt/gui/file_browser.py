@@ -632,3 +632,93 @@ class FileBrowserWidget(QWidget):
             return image_info.get("needs_annotation", True)
         except Exception:
             return True  # Default to needing annotation on error
+
+    def _calculate_file_similarity(self, filename: str, search_term: str) -> float:
+        """Calculate similarity between filename and search term"""
+        try:
+            if not search_term.strip():
+                return 0.0
+
+            # Get filename without extension
+            name_without_ext = filename.rsplit(".", 1)[0]
+            search_lower = search_term.lower().strip()
+            name_lower = name_without_ext.lower()
+
+            # Exact match (case insensitive)
+            if name_lower == search_lower:
+                return 1.0
+
+            # Prefix match
+            if name_lower.startswith(search_lower):
+                return 0.9
+
+            # Contains match
+            if search_lower in name_lower:
+                return 0.8
+
+            # Simple character similarity (fuzzy match)
+            return self._calculate_char_similarity(name_lower, search_lower)
+
+        except Exception:
+            return 0.0
+
+    def _calculate_char_similarity(self, str1: str, str2: str) -> float:
+        """Calculate character-level similarity between two strings"""
+        try:
+            if not str1 or not str2:
+                return 0.0
+
+            # Simple similarity based on common characters
+            set1 = set(str1)
+            set2 = set(str2)
+            common = len(set1 & set2)
+            total = len(set1 | set2)
+
+            if total == 0:
+                return 0.0
+
+            similarity = common / total
+            # Scale to 0.0-0.6 range for fuzzy matches
+            return similarity * 0.6
+
+        except Exception:
+            return 0.0
+
+    def search_and_jump_to_file(self, search_term: str) -> bool:
+        """Search and jump to the most similar file"""
+        try:
+            if not search_term.strip():
+                return False
+
+            if self.image_list.count() == 0:
+                return False
+
+            best_similarity = 0.0
+            best_item = None
+
+            # Find the file with highest similarity
+            for i in range(self.image_list.count()):
+                item = self.image_list.item(i)
+                if item:
+                    image_path = item.data(Qt.UserRole)
+                    if image_path:
+                        filename = Path(image_path).name
+                        similarity = self._calculate_file_similarity(
+                            filename, search_term
+                        )
+
+                        if similarity > best_similarity:
+                            best_similarity = similarity
+                            best_item = item
+
+            # Jump to the best match if found
+            if best_item and best_similarity > 0.0:
+                # Set current item and trigger selection
+                self.image_list.setCurrentItem(best_item)
+                self.on_image_double_clicked(best_item)
+                return True
+
+            return False
+
+        except Exception:
+            return False

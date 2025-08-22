@@ -12,6 +12,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
+    QInputDialog,
     QMainWindow,
     QMessageBox,
     QProgressDialog,
@@ -202,6 +203,15 @@ class BoxMakerMainWindow(QMainWindow):
         self.show_crop_preview_action.setChecked(self.crop_preview_visible)
         self.show_crop_preview_action.triggered.connect(self.toggle_crop_preview)
         view_menu.addAction(self.show_crop_preview_action)
+
+        view_menu.addSeparator()
+
+        # Search Files action
+        search_files_action = QAction("Search Files", self)
+        search_files_action.setShortcut("Ctrl+F")
+        search_files_action.setToolTip("Search for files in current directory (Ctrl+F)")
+        search_files_action.triggered.connect(self.show_file_search)
+        view_menu.addAction(search_files_action)
 
     def create_toolbar(self):
         """Create toolbar"""
@@ -526,6 +536,44 @@ class BoxMakerMainWindow(QMainWindow):
 
         # Save setting
         self.settings.setValue("crop_preview_visible", visible)
+
+    def show_file_search(self):
+        """Show file search dialog and jump to matching file"""
+        try:
+            # Check if there are images to search
+            if not self.file_browser or self.file_browser.get_image_count() == 0:
+                QMessageBox.information(
+                    self,
+                    "No Images",
+                    "No images found in the current directory.",
+                )
+                return
+
+            # Show input dialog
+            search_term, ok = QInputDialog.getText(
+                self,
+                "Search Files",
+                "Enter filename to search:",
+                text="",
+            )
+
+            if ok and search_term.strip():
+                # Perform search and jump
+                if self.file_browser.search_and_jump_to_file(search_term.strip()):
+                    self.status_bar.showMessage(
+                        f"Jumped to closest match for: {search_term}"
+                    )
+                else:
+                    QMessageBox.information(
+                        self,
+                        "No Match Found",
+                        f"No matching files found for: {search_term}",
+                    )
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Search Error", f"Failed to search files: {str(e)}"
+            )
+            logger.error(f"File search error: {str(e)}")
 
     def rename_images_with_hash(self):
         """Rename images in a directory using color hash and average hash"""
